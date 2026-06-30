@@ -1,0 +1,10 @@
+name = "r2-explorer"
+compatibility_date = "2026-06-20"
+
+[vars]
+# AUTH_PASSWORD 留空则无需密码，建议在 Dashboard 设置为加密环境变量
+AUTH_PASSWORD = ""
+
+# CF_ACCOUNT_ID — Cloudflare 账户 ID（在 Dashboard 右侧栏可看到）
+# CF_API_TOKEN — Cloudflare API Token（需要 R2 读写权限）
+# 以上两个建议在 Dashboard 设置为加密环境变量，不要写在 wrangler.toml 中
