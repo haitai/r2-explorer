@@ -5,7 +5,10 @@
 import { verifyAuth } from '../_auth.js'
 
 // === AWS Signature V4 签名 ===
-async function signV4(method, bucket, s3QueryPath, extraHeaders, body, env) {
+// 严格遵循 AWS V4 签名规范：
+// - canonicalUri: 仅路径部分（不含查询参数）
+// - canonicalQuerystring: 查询参数必须按 key 排序，key/value 分别 URI 编码
+async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, body, env) {
   const accessKey = env.R2_ACCESS_KEY_ID
   const secretKey = env.R2_SECRET_ACCESS_KEY
   const accountId = env.CF_ACCOUNT_ID
@@ -26,23 +29,50 @@ async function signV4(method, bucket, s3QueryPath, extraHeaders, body, env) {
     ...(extraHeaders || {}),
   }
 
+  // 构建规范查询字符串（参数按 key 字典序排列，key/value 分别 URI 编码）
+  const sortedKeys = Object.keys(queryParams || {}).sort()
+  const canonicalQuerystring = sortedKeys
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
+    .join('&')
+
   const signedHeaderKeys = Object.keys(allHeaders).sort()
   const signedHeadersStr = signedHeaderKeys.join(';')
-  const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${allHeaders[k]?.toString().trim()}`).join('\n') + '\n'
+  const canonicalHeaders = signedHeaderKeys
+    .map(k => `${k}:${allHeaders[k]?.toString().trim()}`)
+    .join('\n') + '\n'
 
-  const canonicalRequest = [method, s3QueryPath, '', canonicalHeaders, signedHeadersStr, payloadHash].join('\n')
+  // Canonical Request: METHOD + URI + QUERYSTRING + HEADERS + SIGNED_HEADERS + PAYLOAD_HASH
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    canonicalQuerystring,
+    canonicalHeaders,
+    signedHeadersStr,
+    payloadHash,
+  ].join('\n')
+
   const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
-  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, await sha256Hex(canonicalRequest)].join('\n')
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    await sha256Hex(canonicalRequest),
+  ].join('\n')
 
   const signingKey = await hmacChain(secretKey, dateStamp, region, service)
   const signature = await hmacHex(signingKey, stringToSign)
 
   const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeadersStr}, Signature=${signature}`
   const requestHeaders = { ...allHeaders, Authorization: authHeader }
-  // Remove host from request headers (fetch sets it)
-  delete requestHeaders.host
+  delete requestHeaders.host // fetch 会自动设置 host
 
-  return { host, headers: requestHeaders }
+  // 构建实际请求 URL（查询参数附加到路径后）
+  const queryString = sortedKeys
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
+    .join('&')
+  const requestUrl = queryString ? `${canonicalUri}?${queryString}` : canonicalUri
+
+  return { host, headers: requestHeaders, requestUrl }
 }
 
 async function sha256Hex(data) {
@@ -74,10 +104,6 @@ async function hmacChain(secretKey, date, region, service) {
   return k
 }
 
-function escapeXml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 // === S3 兼容 API 路由处理 ===
 export async function onRequest(context) {
   const { request, env } = context
@@ -87,7 +113,7 @@ export async function onRequest(context) {
   }
 
   if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.CF_ACCOUNT_ID) {
-    return new Response(JSON.stringify({ error: 'Missing R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY or CF_ACCOUNT_ID environment variables' }), {
+    return new Response(JSON.stringify({ error: 'Missing env vars' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })
@@ -95,10 +121,9 @@ export async function onRequest(context) {
 
   const url = new URL(request.url)
   const method = request.method
-  // URL 格式: /api/s3/{bucket}/{key...}
   const pathParts = url.pathname.replace('/api/s3/', '').split('/')
   const bucket = pathParts[0]
-  const key = decodeURIComponent(pathParts.slice(1).join('/'))
+  const key = pathParts.slice(1).join('/') ? decodeURIComponent(pathParts.slice(1).join('/')) : ''
 
   if (!bucket) {
     return new Response(JSON.stringify({ error: 'Bucket name required' }), {
@@ -117,11 +142,28 @@ export async function onRequest(context) {
     const maxKeys = url.searchParams.get('max_keys') || '1000'
     const contToken = url.searchParams.get('continuation_token') || ''
 
-    let s3Path = `?list-type=2&prefix=${encodeURIComponent(prefix)}&delimiter=${encodeURIComponent(delimiter)}&max-keys=${maxKeys}`
-    if (contToken) s3Path += `&continuation-token=${encodeURIComponent(contToken)}`
+    const queryParams = {
+      'list-type': '2',
+      'prefix': prefix,
+      'delimiter': delimiter,
+      'max-keys': maxKeys,
+    }
+    if (contToken) queryParams['continuation-token'] = contToken
 
-    const signed = await signV4('GET', bucket, '/' + s3Path, {}, null, env)
-    const res = await fetch(`${endpoint}/${bucket}${s3Path}`, { method: 'GET', headers: signed.headers })
+    const canonicalUri = `/${bucket}`
+    const signed = await signV4('GET', bucket, canonicalUri, queryParams, {}, null, env)
+
+    const res = await fetch(`${endpoint}${signed.requestUrl}`, { method: 'GET', headers: signed.headers })
+
+    if (!res.ok) {
+      const errorXml = await res.text()
+      console.error('S3 ListObjects error:', res.status, errorXml)
+      return new Response(JSON.stringify({ error: `S3 API error: ${res.status}`, detail: errorXml }), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const xml = await res.text()
     const json = parseListXml(xml, prefix)
     return new Response(JSON.stringify(json), { headers: { 'Content-Type': 'application/json' } })
@@ -129,8 +171,10 @@ export async function onRequest(context) {
 
   // === 下载对象 (GET /api/s3/{bucket}/{key}) ===
   if (method === 'GET' && key) {
-    const signed = await signV4('GET', bucket, `/${encodeURIComponent(key)}`, {}, null, env)
-    const res = await fetch(`${endpoint}/${bucket}/${encodeURIComponent(key)}`, { method: 'GET', headers: signed.headers })
+    const canonicalUri = `/${bucket}/${key}`
+    const signed = await signV4('GET', bucket, canonicalUri, {}, {}, null, env)
+
+    const res = await fetch(`${endpoint}${signed.requestUrl}`, { method: 'GET', headers: signed.headers })
 
     const newHeaders = new Headers()
     const ct = res.headers.get('content-type')
@@ -151,12 +195,13 @@ export async function onRequest(context) {
     const bodyBuffer = await request.arrayBuffer()
     const contentType = request.headers.get('Content-Type') || 'application/octet-stream'
 
-    const signed = await signV4('PUT', bucket, `/${encodeURIComponent(key)}`, {
+    const canonicalUri = `/${bucket}/${key}`
+    const signed = await signV4('PUT', bucket, canonicalUri, {}, {
       'Content-Type': contentType,
     }, bodyBuffer, env)
     signed.headers['Content-Type'] = contentType
 
-    const res = await fetch(`${endpoint}/${bucket}/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${endpoint}${signed.requestUrl}`, {
       method: 'PUT', headers: signed.headers, body: bodyBuffer,
     })
 
@@ -167,8 +212,10 @@ export async function onRequest(context) {
 
   // === 删除对象 (DELETE /api/s3/{bucket}/{key}) ===
   if (method === 'DELETE' && key) {
-    const signed = await signV4('DELETE', bucket, `/${encodeURIComponent(key)}`, {}, null, env)
-    const res = await fetch(`${endpoint}/${bucket}/${encodeURIComponent(key)}`, {
+    const canonicalUri = `/${bucket}/${key}`
+    const signed = await signV4('DELETE', bucket, canonicalUri, {}, {}, null, env)
+
+    const res = await fetch(`${endpoint}${signed.requestUrl}`, {
       method: 'DELETE', headers: signed.headers,
     })
     return new Response(JSON.stringify({ key, deleted: res.ok }), {
@@ -181,11 +228,11 @@ export async function onRequest(context) {
     const body = await request.json()
 
     if (body.keys) {
-      // 逐个删除（简单可靠，避免 MD5 签名问题）
       const results = []
       for (const k of body.keys) {
-        const signed = await signV4('DELETE', bucket, `/${encodeURIComponent(k)}`, {}, null, env)
-        const res = await fetch(`${endpoint}/${bucket}/${encodeURIComponent(k)}`, {
+        const canonicalUri = `/${bucket}/${k}`
+        const signed = await signV4('DELETE', bucket, canonicalUri, {}, {}, null, env)
+        const res = await fetch(`${endpoint}${signed.requestUrl}`, {
           method: 'DELETE', headers: signed.headers,
         })
         results.push({ key: k, deleted: res.ok })
@@ -195,11 +242,11 @@ export async function onRequest(context) {
       })
     }
 
-    // 复制操作 (POST body={ action:'copy', src, dst })
     if (body.action === 'copy' && body.src && body.dst) {
       // GET src → PUT dst
-      const srcSigned = await signV4('GET', bucket, `/${encodeURIComponent(body.src)}`, {}, null, env)
-      const srcRes = await fetch(`${endpoint}/${bucket}/${encodeURIComponent(body.src)}`, {
+      const srcUri = `/${bucket}/${body.src}`
+      const srcSigned = await signV4('GET', bucket, srcUri, {}, {}, null, env)
+      const srcRes = await fetch(`${endpoint}${srcSigned.requestUrl}`, {
         method: 'GET', headers: srcSigned.headers,
       })
       if (!srcRes.ok) {
@@ -210,12 +257,11 @@ export async function onRequest(context) {
       const srcBody = await srcRes.arrayBuffer()
       const srcCt = srcRes.headers.get('content-type') || 'application/octet-stream'
 
-      const dstSigned = await signV4('PUT', bucket, `/${encodeURIComponent(body.dst)}`, {
-        'Content-Type': srcCt,
-      }, srcBody, env)
+      const dstUri = `/${bucket}/${body.dst}`
+      const dstSigned = await signV4('PUT', bucket, dstUri, {}, { 'Content-Type': srcCt }, srcBody, env)
       dstSigned.headers['Content-Type'] = srcCt
 
-      const dstRes = await fetch(`${endpoint}/${bucket}/${encodeURIComponent(body.dst)}`, {
+      const dstRes = await fetch(`${endpoint}${dstSigned.requestUrl}`, {
         method: 'PUT', headers: dstSigned.headers, body: srcBody,
       })
 
@@ -245,29 +291,24 @@ function parseListXml(xml, requestPrefix = '') {
   if (tokenMatch) result.nextContinuationToken = tokenMatch[1]
 
   // CommonPrefixes (文件夹)
-  const prefixRegex = /<Prefix>([^<]+)<\/Prefix>/g
-  let m
-  // Only extract prefixes inside <CommonPrefixes> blocks
-  const cpBlocks = xml.matchAll(/<CommonPrefixes>[\s\S]*?<\/CommonPrefixes>/g)
-  for (const block of cpBlocks) {
+  for (const block of xml.matchAll(/<CommonPrefixes>[\s\S]*?<\/CommonPrefixes>/g)) {
     const pm = block[0].match(/<Prefix>([^<]+)<\/Prefix>/)
     if (pm) result.prefixes.push(pm[1])
   }
 
   // Contents (文件)
-  const contentRegex = /<Contents>[\s\S]*?<\/Contents>/g
-  for (const block of xml.matchAll(contentRegex)) {
+  for (const block of xml.matchAll(/<Contents>[\s\S]*?<\/Contents>/g)) {
     const keyM = block[0].match(/<Key>([^<]+)<\/Key>/)
     const sizeM = block[0].match(/<Size>([^<]+)<\/Size>/)
     const dateM = block[0].match(/<LastModified>([^<]+)<\/LastModified>/)
-    const etagM = block[0].match(/<ETag>([^<"]*)"?\s*<\/ETag>/)
+    const etagM = block[0].match(/<ETag>"?([^"<]+)"?\s*<\/ETag>/)
     if (keyM) {
-      // 过滤掉文件夹 marker（key 以 / 结尾且 size=0）
       const size = sizeM ? parseInt(sizeM[1]) : 0
+      // 过滤掉文件夹 marker（key 以 / 结尾且 size=0）
       if (keyM[1].endsWith('/') && size === 0) continue
       result.objects.push({
         key: keyM[1],
-        size: size,
+        size,
         lastModified: dateM ? dateM[1] : '',
         etag: etagM ? etagM[1] : '',
       })
