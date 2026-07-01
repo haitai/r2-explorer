@@ -341,11 +341,13 @@ const detailGridStyle = computed(() => {
 const resizingCol = ref(null)
 const resizeStartX = ref(0)
 const resizeStartWidth = ref(0)
+const justResized = ref(false)
 
 function startResize(col, event) {
   resizingCol.value = col
   resizeStartX.value = event.clientX
   resizeStartWidth.value = colWidths.value[col]
+  justResized.value = true
   document.addEventListener('mousemove', onResizeMove)
   document.addEventListener('mouseup', onResizeEnd)
   document.body.style.cursor = 'col-resize'
@@ -363,6 +365,8 @@ function onResizeEnd() {
   document.removeEventListener('mouseup', onResizeEnd)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
+  // 延迟清除 justResized 标志，防止 click 事件在 mouseup 后触发
+  setTimeout(() => { justResized.value = false }, 100)
   // 保存列宽到 localStorage
   localStorage.setItem('r2_col_widths', JSON.stringify(colWidths.value))
 }
@@ -426,7 +430,7 @@ function selectItem(item) {
   else selectedItems.value.push(item)
 }
 function clearSelection() { selectedItems.value = [] }
-function sortBy(f) { sortField.value === f ? sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc' : (sortField.value = f, sortOrder.value = 'asc') }
+function sortBy(f) { if (justResized.value) return; sortField.value === f ? sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc' : (sortField.value = f, sortOrder.value = 'asc') }
 function sortIndicator(f) { return sortField.value === f ? (sortOrder.value === 'asc' ? '↑' : '↓') : '' }
 function toggleView() { viewMode.value = viewMode.value === 'detail' ? 'grid' : 'detail' }
 function toggleExpand(prefix) { expandedFolders.value.has(prefix) ? expandedFolders.value.delete(prefix) : expandedFolders.value.add(prefix) }
@@ -650,6 +654,9 @@ onMounted(async () => {
 }
 
 .detail-header .col { cursor: pointer; padding: 2px 8px; overflow: hidden; }
+.detail-header .col.col-name, .detail-header .col.col-size, .detail-header .col.col-date, .detail-header .col.col-type {
+  overflow: visible; /* 允许 resize-handle 越界显示 */
+}
 .detail-header .col-icon { cursor: default; text-align: center; padding: 2px 0; }
 .detail-header .col-actions { cursor: default; text-align: center; }
 
