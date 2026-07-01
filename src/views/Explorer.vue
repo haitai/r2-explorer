@@ -81,24 +81,35 @@
 
         <!-- 详情视图 -->
         <div v-else-if="viewMode === 'detail'" class="detail-view">
-          <div class="detail-header">
-            <span class="col col-icon"></span>
+          <div class="detail-header" :style="detailGridStyle">
+            <span class="col col-icon" @click.stop></span>
+            <span class="resize-handle" @mousedown.prevent="startResize('icon', $event)"></span>
             <span class="col col-name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}</span>
+            <span class="resize-handle" @mousedown.prevent="startResize('name', $event)"></span>
             <span class="col col-size" @click="sortBy('size')">大小 {{ sortIndicator('size') }}</span>
+            <span class="resize-handle" @mousedown.prevent="startResize('size', $event)"></span>
             <span class="col col-date" @click="sortBy('date')">修改日期 {{ sortIndicator('date') }}</span>
+            <span class="resize-handle" @mousedown.prevent="startResize('date', $event)"></span>
             <span class="col col-type" @click="sortBy('type')">类型 {{ sortIndicator('type') }}</span>
+            <span class="resize-handle" @mousedown.prevent="startResize('type', $event)"></span>
             <span class="col col-actions">操作</span>
           </div>
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
-            class="file-row" :class="{ selected: isSelected(item), folder: item.prefix !== undefined }"
+            class="file-row" :style="detailGridStyle"
+            :class="{ selected: isSelected(item), folder: item.prefix !== undefined }"
             @click.stop="selectItem(item)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="col col-icon">{{ itemIcon(item) }}</span>
+            <span class="resize-handle-ghost"></span>
             <span class="col col-name">{{ item.name }}</span>
+            <span class="resize-handle-ghost"></span>
             <span class="col col-size">{{ item.size ? formatSize(item.size) : '' }}</span>
+            <span class="resize-handle-ghost"></span>
             <span class="col col-date">{{ item.lastModified ? formatDate(item.lastModified) : '' }}</span>
+            <span class="resize-handle-ghost"></span>
             <span class="col col-type">{{ itemType(item) }}</span>
+            <span class="resize-handle-ghost"></span>
             <span class="col col-actions">
               <template v-if="item.prefix === undefined">
                 <button class="action-btn" v-if="isPreviewable(item)" @click.stop="previewItem(item)" title="预览">👁</button>
@@ -324,6 +335,48 @@ const moveTarget = ref(null)
 const copyMoveTarget = ref('')
 const deleteTargets = ref([])
 const contextMenu = ref({ visible: false, x: 0, y: 0, target: '', item: null })
+
+// === 列宽调整 ===
+const DEFAULT_COL_WIDTHS = { icon: 28, name: 250, size: 80, date: 140, type: 100, actions: 70 }
+const colWidths = ref({ ...DEFAULT_COL_WIDTHS })
+// 从 localStorage 读取保存的列宽
+const savedWidths = localStorage.getItem('r2_col_widths')
+if (savedWidths) {
+  try { Object.assign(colWidths.value, JSON.parse(savedWidths)) } catch(e) {}
+}
+const detailGridStyle = computed(() => {
+  const w = colWidths.value
+  // grid: col + resize-handle (4px) 交替排列
+  return { gridTemplateColumns: `${w.icon}px 4px ${w.name}px 4px ${w.size}px 4px ${w.date}px 4px ${w.type}px 4px ${w.actions}px` }
+})
+const resizingCol = ref(null)
+const resizeStartX = ref(0)
+const resizeStartWidth = ref(0)
+
+function startResize(col, event) {
+  resizingCol.value = col
+  resizeStartX.value = event.clientX
+  resizeStartWidth.value = colWidths.value[col]
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+function onResizeMove(event) {
+  if (!resizingCol.value) return
+  const delta = event.clientX - resizeStartX.value
+  const newWidth = Math.max(30, resizeStartWidth.value + delta)
+  colWidths.value[resizingCol.value] = newWidth
+}
+function onResizeEnd() {
+  resizingCol.value = null
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  // 保存列宽到 localStorage
+  localStorage.setItem('r2_col_widths', JSON.stringify(colWidths.value))
+}
 
 // === 计算属性 ===
 const items = computed(() => [...folders.value, ...files.value])
@@ -590,14 +643,13 @@ onMounted(async () => {
 .delete-list { margin-top:8px; max-height:200px; overflow-y:auto; }
 .delete-item { padding:3px 0; font-size:13px; }
 
-/* 详情视图 — 列对齐：header 和 row 用完全相同的列宽 */
+/* 详情视图 — 可调节列宽 */
 .detail-view { height:100%; overflow-y:auto; }
 
 .detail-header {
   display: grid;
-  grid-template-columns: 28px 1fr 80px 140px 100px 60px;
   align-items: center;
-  padding: 4px 8px;
+  padding: 4px 0;
   background: var(--win-bg);
   border-bottom: 1px solid var(--win-border);
   font-size: 12px;
@@ -608,14 +660,37 @@ onMounted(async () => {
   z-index: 1;
 }
 
-.detail-header .col { cursor: pointer; padding: 2px 4px; }
-.detail-header .col-icon { cursor: default; }
+.detail-header .col { cursor: pointer; padding: 2px 8px; overflow: hidden; }
+.detail-header .col-icon { cursor: default; text-align: center; padding: 2px 0; }
+.detail-header .col-actions { cursor: default; text-align: center; }
+
+/* 列宽拖拽手柄 — 仅在 header 中显示 */
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 2;
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -2px; right: -2px;
+}
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  background: var(--win-accent);
+}
+
+/* file-row 中的占位 ghost（保持 grid 对齐，不可见不可交互） */
+.resize-handle-ghost {
+  width: 4px;
+}
 
 .file-row {
   display: grid;
-  grid-template-columns: 28px 1fr 80px 140px 100px 60px;
   align-items: center;
-  padding: 2px 8px;
+  padding: 2px 0;
   cursor: pointer;
   border: 1px solid transparent;
   transition: background 0.1s;
@@ -626,11 +701,10 @@ onMounted(async () => {
 .file-row:hover { background: #e5f3ff; }
 .file-row.selected { background: var(--win-selected); border-color: var(--win-selected-border); }
 
-.file-row .col-icon { font-size: 16px; text-align: center; }
-.file-row .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-row .col-size, .file-row .col-date, .file-row .col-type { color: var(--win-text-secondary); font-size: 12px; }
-
-.col-actions { display: flex; gap: 2px; justify-content: center; }
+.file-row .col-icon { font-size: 16px; text-align: center; padding: 2px 0; }
+.file-row .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; }
+.file-row .col-size, .file-row .col-date, .file-row .col-type { color: var(--win-text-secondary); font-size: 12px; padding: 2px 8px; text-align: right; }
+.file-row .col-actions { display: flex; gap: 2px; justify-content: center; }
 
 .action-btn {
   width: 22px; height: 22px;
