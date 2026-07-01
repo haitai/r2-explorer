@@ -98,6 +98,7 @@
             <span class="col col-type">{{ itemType(item) }}</span>
             <span class="col col-actions">
               <template v-if="item.prefix === undefined">
+                <button class="action-btn" v-if="isPreviewable(item)" @click.stop="previewItem(item)" title="预览">👁</button>
                 <button class="action-btn" @click.stop="downloadItem(item)" title="下载">⬇</button>
                 <button class="action-btn danger" @click.stop="deleteSingleItem(item)" title="删除">🗑</button>
               </template>
@@ -118,6 +119,7 @@
             <span class="icon">{{ itemIcon(item) }}</span>
             <span class="name">{{ item.name }}</span>
             <div class="grid-actions" v-if="item.prefix === undefined">
+              <button class="action-btn small" v-if="isPreviewable(item)" @click.stop="previewItem(item)" title="预览">👁</button>
               <button class="action-btn small" @click.stop="downloadItem(item)" title="下载">⬇</button>
               <button class="action-btn small danger" @click.stop="deleteSingleItem(item)" title="删除">🗑</button>
             </div>
@@ -137,7 +139,8 @@
     <!-- 右键菜单 -->
     <div v-if="contextMenu.visible" class="context-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
       <template v-if="contextMenu.target === 'item'">
-        <div class="context-menu-item" @click="openItem(contextMenu.item)">📂 打开</div>
+        <div v-if="contextMenu.item.prefix !== undefined" class="context-menu-item" @click="openItem(contextMenu.item)">📂 打开文件夹</div>
+        <div v-if="contextMenu.item.prefix === undefined && isPreviewable(contextMenu.item)" class="context-menu-item" @click="previewItem(contextMenu.item)">👁 预览</div>
         <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="downloadItem(contextMenu.item)">⬇ 下载</div>
         <div class="context-menu-sep" />
         <div class="context-menu-item" @click="showRenameModal = true; renameTarget = contextMenu.item; renameNewName = contextMenu.item.name">✏️ 重命名</div>
@@ -437,20 +440,43 @@ function goBack() { if (!canGoBack.value) return; navHistoryIdx.value--; current
 function goForward() { if (!canGoForward.value) return; navHistoryIdx.value++; currentPath.value = navHistory.value[navHistoryIdx.value]; addressInput.value = currentPath.value; loadDirectory(currentPath.value) }
 function goUp() { if (!canGoUp.value) return; const parts = currentPath.value.split('/').filter(Boolean); parts.pop(); navigateTo(parts.join('/') + (parts.length ? '/' : '')) }
 function refresh() { loadDirectory(currentPath.value) }
-function openItem(item) { item.prefix !== undefined ? navigateTo(item.prefix) : downloadItem(item) }
+function openItem(item) { item.prefix !== undefined ? navigateTo(item.prefix) : (isPreviewable(item) ? previewItem(item) : downloadItem(item)) }
+
+// === 预览 vs 下载 ===
+function isPreviewable(item) {
+  if (item.prefix !== undefined) return false
+  const ext = (item.name || '').split('.').pop().toLowerCase()
+  const previewable = ['jpg','jpeg','png','gif','webp','svg','bmp','ico','avif', 'mp4','webm','mov','avi','mkv', 'mp3','wav','ogg','flac','aac','m4a', 'pdf', 'txt','md','json','js','ts','py','html','css','xml','yaml','yml','sh','bat','csv','log','ini','conf','cfg','toml','env', 'woff','woff2','ttf','otf']
+  return previewable.includes(ext)
+}
+
+function previewItem(item) {
+  // 在浏览器中直接打开（后端不加 Content-Disposition: attachment）
+  const url = `/api/s3/${currentBucket.value}/${encodeURIComponent(item.key)}`
+  const headers = {}
+  if (r2client.authToken) headers['Authorization'] = `Bearer ${r2client.authToken}`
+  // 用 fetch 获取内容，然后在新窗口中展示
+  fetch(url, { headers }).then(res => {
+    if (!res.ok) throw new Error(`Error: ${res.status}`)
+    return res.blob()
+  }).then(blob => {
+    const blobUrl = URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank')
+    // 延迟释放，给新窗口加载时间
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+  }).catch(e => console.error('Preview failed:', e))
+}
 
 // === 下载 ===
 function downloadItem(item) {
-  // 通过后端代理下载，带 Authorization header
-  const url = `/api/s3/${currentBucket.value}/${encodeURIComponent(item.key)}`
-  const a = document.createElement('a')
-  a.href = url
-  // 后端会对非可预览类型设置 Content-Disposition: attachment
-  // 对于可预览类型（图片等），我们仍强制下载
-  a.setAttribute('download', item.name)
-  // 需要带认证 token
-  // 用 fetch + blob 方式确保带 auth header 且触发下载
-  fetchWithAuth(url).then(blob => {
+  // 强制下载（后端会加 Content-Disposition: attachment）
+  const url = `/api/s3/${currentBucket.value}/${encodeURIComponent(item.key)}?download=true`
+  const headers = {}
+  if (r2client.authToken) headers['Authorization'] = `Bearer ${r2client.authToken}`
+  fetch(url, { headers }).then(res => {
+    if (!res.ok) throw new Error(`Download error: ${res.status}`)
+    return res.blob()
+  }).then(blob => {
     const blobUrl = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = blobUrl
@@ -460,14 +486,6 @@ function downloadItem(item) {
     document.body.removeChild(link)
     URL.revokeObjectURL(blobUrl)
   }).catch(e => console.error('Download failed:', e))
-}
-
-async function fetchWithAuth(url) {
-  const headers = {}
-  if (r2client.authToken) headers['Authorization'] = `Bearer ${r2client.authToken}`
-  const res = await fetch(url, { headers })
-  if (!res.ok) throw new Error(`Download error: ${res.status}`)
-  return res.blob()
 }
 
 // === 删除 ===

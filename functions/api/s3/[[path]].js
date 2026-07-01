@@ -185,7 +185,9 @@ export async function onRequest(context) {
     if (lm) newHeaders.set('last-modified', lm)
 
     const viewable = ['image/', 'text/', 'application/pdf', 'video/', 'audio/'].some(t => (ct || '').startsWith(t))
-    if (!viewable) newHeaders.set('Content-Disposition', `attachment; filename="${key.split('/').pop()}"`)
+    // 前端传 ?download=true 时强制下载，否则可预览类型不加 attachment header
+    const forceDownload = url.searchParams.get('download') === 'true'
+    if (!viewable || forceDownload) newHeaders.set('Content-Disposition', `attachment; filename="${key.split('/').pop()}"`)
 
     return new Response(res.body, { status: res.status, headers: newHeaders })
   }
