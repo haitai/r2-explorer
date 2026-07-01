@@ -518,14 +518,15 @@ function onItemContextMenu(item, e) { if (!isSelected(item)) selectedItems.value
 async function doUpload() {
   if (!uploadFiles.value.length || !currentBucket.value) return
   uploading.value = true; uploadProgress.value = 0
-  const total = uploadFiles.value.length; let done = 0
+  const total = uploadFiles.value.length; let done = 0; let failed = 0
   for (const file of uploadFiles.value) {
     const key = currentPath.value + file.name
-    try { await r2client.putObject(currentBucket.value, key, file) } catch(e) { console.error(e) }
+    try { await r2client.putObject(currentBucket.value, key, file) } catch(e) { console.error(e); failed++ }
     done++; uploadProgress.value = Math.round((done/total)*100)
   }
   uploading.value = false; uploadFiles.value = []; uploadProgress.value = 0
   showUploadModal.value = false; refresh()
+  if (failed > 0) alert(`${failed} 个文件上传失败，请查看控制台日志`)
 }
 function onFileSelect(e) { uploadFiles.value = [...e.target.files] }
 function onDrop(e) { uploadFiles.value = [...e.dataTransfer.files] }

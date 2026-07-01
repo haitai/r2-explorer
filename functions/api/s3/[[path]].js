@@ -219,17 +219,30 @@ export async function onRequest(context) {
     const bodyBuffer = await request.arrayBuffer()
     const contentType = request.headers.get('Content-Type') || 'application/octet-stream'
 
+    // PUT 上传使用 UNSIGNED-PAYLOAD 避免 body hash 计算问题
+    // （Workers 环境下 body 可能被修改，如 Content-Length 不匹配）
     const canonicalUri = `/${bucket}/${key}`
     const signed = await signV4('PUT', bucket, canonicalUri, {}, {
       'Content-Type': contentType,
-    }, bodyBuffer, env)
+    }, null, env) // body=null → UNSIGNED-PAYLOAD
     signed.headers['Content-Type'] = contentType
+
+    console.log('S3 PUT:', key, 'size:', bodyBuffer.byteLength, 'contentType:', contentType)
 
     const res = await fetch(`${endpoint}${signed.requestUrl}`, {
       method: 'PUT', headers: signed.headers, body: bodyBuffer,
     })
 
-    return new Response(JSON.stringify({ key, size: bodyBuffer.byteLength, uploaded: res.ok }), {
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error('S3 PUT error:', res.status, errText)
+      return new Response(JSON.stringify({ error: `S3 PUT failed: ${res.status}`, key, detail: errText }), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    return new Response(JSON.stringify({ key, size: bodyBuffer.byteLength, uploaded: true }), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -242,7 +255,17 @@ export async function onRequest(context) {
     const res = await fetch(`${endpoint}${signed.requestUrl}`, {
       method: 'DELETE', headers: signed.headers,
     })
-    return new Response(JSON.stringify({ key, deleted: res.ok }), {
+
+    if (!res.ok && res.status !== 204) {
+      const errText = await res.text()
+      console.error('S3 DELETE error:', res.status, errText)
+      return new Response(JSON.stringify({ error: `S3 DELETE failed: ${res.status}`, key, detail: errText }), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    return new Response(JSON.stringify({ key, deleted: true }), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -259,7 +282,7 @@ export async function onRequest(context) {
         const res = await fetch(`${endpoint}${signed.requestUrl}`, {
           method: 'DELETE', headers: signed.headers,
         })
-        results.push({ key: k, deleted: res.ok })
+        results.push({ key: k, deleted: res.ok || res.status === 204 })
       }
       return new Response(JSON.stringify({ results }), {
         headers: { 'Content-Type': 'application/json' },
@@ -274,7 +297,8 @@ export async function onRequest(context) {
         method: 'GET', headers: srcSigned.headers,
       })
       if (!srcRes.ok) {
-        return new Response(JSON.stringify({ error: `Source not found: ${body.src}` }), {
+        const errText = await srcRes.text()
+        return new Response(JSON.stringify({ error: `Source not found: ${body.src}`, detail: errText }), {
           status: 404, headers: { 'Content-Type': 'application/json' },
         })
       }
@@ -282,14 +306,21 @@ export async function onRequest(context) {
       const srcCt = srcRes.headers.get('content-type') || 'application/octet-stream'
 
       const dstCanonicalUri = `/${bucket}/${body.dst}`
-      const dstSigned = await signV4('PUT', bucket, dstCanonicalUri, {}, { 'Content-Type': srcCt }, srcBody, env)
+      const dstSigned = await signV4('PUT', bucket, dstCanonicalUri, {}, { 'Content-Type': srcCt }, null, env) // UNSIGNED-PAYLOAD
       dstSigned.headers['Content-Type'] = srcCt
 
       const dstRes = await fetch(`${endpoint}${dstSigned.requestUrl}`, {
         method: 'PUT', headers: dstSigned.headers, body: srcBody,
       })
 
-      return new Response(JSON.stringify({ src: body.src, dst: body.dst, copied: dstRes.ok }), {
+      if (!dstRes.ok) {
+        const errText = await dstRes.text()
+        return new Response(JSON.stringify({ error: `Copy PUT failed: ${dstRes.status}`, detail: errText }), {
+          status: dstRes.status, headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({ src: body.src, dst: body.dst, copied: true }), {
         headers: { 'Content-Type': 'application/json' },
       })
     }
