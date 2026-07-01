@@ -4,6 +4,9 @@
     <div class="win-titlebar">
       <span class="titlebar-icon">🗄️</span>
       <span class="titlebar-text">{{ currentBucket || 'R2 Explorer' }} — {{ currentPathDisplay }}</span>
+      <div class="titlebar-actions">
+        <button class="titlebar-btn logout" @click="doLogout" title="退出登录">🔒 退出</button>
+      </div>
     </div>
 
     <!-- 工具栏 -->
@@ -551,6 +554,12 @@ async function doCopyMove() {
 }
 
 // === 初始化 ===
+function doLogout() {
+  r2client.authToken = ''
+  localStorage.removeItem('r2_token')
+  router.push('/login')
+}
+
 onMounted(async () => {
   if (!r2client.authToken) { router.push('/login'); return }
   await loadBuckets()
@@ -562,6 +571,11 @@ onMounted(async () => {
 .explorer-root { display:flex; flex-direction:column; height:100vh; }
 .titlebar-icon { margin-right:6px; }
 .titlebar-text { font-weight:500; }
+.titlebar-actions { margin-left:auto; display:flex; gap:4px; }
+.titlebar-btn { border:none; background:none; cursor:pointer; font-size:12px; padding:2px 8px; border-radius:3px; transition:all 0.15s; }
+.titlebar-btn:hover { background:#e5e5e5; }
+.titlebar-btn.logout { color:var(--win-text-secondary); }
+.titlebar-btn.logout:hover { background:#fde; color:var(--win-danger); }
 .sidebar-section { padding:4px 0; }
 .sidebar-title { padding:6px 12px 4px; font-size:11px; color:var(--win-text-secondary); font-weight:600; }
 .bucket-select { height:28px; border:1px solid var(--win-border); border-radius:3px; background:#fff; font-size:13px; padding:0 8px; min-width:140px; }
