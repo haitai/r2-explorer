@@ -1,5 +1,6 @@
 name = "r2-explorer"
 compatibility_date = "2026-06-20"
+pages_build_output_dir = "dist"
 
 [vars]
 # AUTH_PASSWORD 留空则无需密码，建议在 Dashboard 设置为加密环境变量

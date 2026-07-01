@@ -2,7 +2,7 @@
 // 通过 R2 S3 兼容接口操作任意桶的对象
 // 需要环境变量: CF_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 
-import { verifyAuth } from './_auth.js'
+import { verifyAuth } from '../_auth.js'
 
 // === AWS Signature V4 签名 ===
 async function signV4(method, bucket, s3QueryPath, extraHeaders, body, env) {
