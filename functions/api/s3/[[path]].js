@@ -5,9 +5,11 @@
 import { verifyAuth } from '../_auth.js'
 
 // === AWS Signature V4 签名 ===
-// 严格遵循 AWS V4 签名规范：
-// - canonicalUri: 仅路径部分（不含查询参数）
+// S3 规范: canonical URI 不做 URI 编码（S3 特殊规则）
+// 只需把路径中的多个连续 / 标准化为单个 /
+// - 实际请求 URL: 路径部分需要 URI 编码（但 / 不编码）
 // - canonicalQuerystring: 查询参数必须按 key 排序，key/value 分别 URI 编码
+
 async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, body, env) {
   const accessKey = env.R2_ACCESS_KEY_ID
   const secretKey = env.R2_SECRET_ACCESS_KEY
@@ -41,7 +43,7 @@ async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, b
     .map(k => `${k}:${allHeaders[k]?.toString().trim()}`)
     .join('\n') + '\n'
 
-  // Canonical Request: METHOD + URI + QUERYSTRING + HEADERS + SIGNED_HEADERS + PAYLOAD_HASH
+  // Canonical Request (S3: canonicalUri 不编码)
   const canonicalRequest = [
     method,
     canonicalUri,
@@ -66,11 +68,12 @@ async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, b
   const requestHeaders = { ...allHeaders, Authorization: authHeader }
   delete requestHeaders.host // fetch 会自动设置 host
 
-  // 构建实际请求 URL（查询参数附加到路径后）
+  // 构建实际请求 URL（路径部分 URI 编码，/ 不编码）
+  const requestPath = canonicalUri.split('/').map(s => encodeURIComponent(s)).join('/')
   const queryString = sortedKeys
     .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
     .join('&')
-  const requestUrl = queryString ? `${canonicalUri}?${queryString}` : canonicalUri
+  const requestUrl = queryString ? `${requestPath}?${queryString}` : requestPath
 
   return { host, headers: requestHeaders, requestUrl }
 }
@@ -121,6 +124,8 @@ export async function onRequest(context) {
 
   const url = new URL(request.url)
   const method = request.method
+  // 注意: Pages Function [[path]] 路由会自动解码 URL 中的 %2F
+  // 所以 pathname 中 key 部分已经是解码后的原始路径
   const pathParts = url.pathname.replace('/api/s3/', '').split('/')
   const bucket = pathParts[0]
   const key = pathParts.slice(1).join('/') ? decodeURIComponent(pathParts.slice(1).join('/')) : ''
@@ -150,6 +155,7 @@ export async function onRequest(context) {
     }
     if (contToken) queryParams['continuation-token'] = contToken
 
+    // S3: canonicalUri 不编码，就是 /bucket
     const canonicalUri = `/${bucket}`
     const signed = await signV4('GET', bucket, canonicalUri, queryParams, {}, null, env)
 
@@ -169,12 +175,25 @@ export async function onRequest(context) {
     return new Response(JSON.stringify(json), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // === 下载对象 (GET /api/s3/{bucket}/{key}) ===
+  // === 下载/预览对象 (GET /api/s3/{bucket}/{key} 或 GET ...?download=true) ===
   if (method === 'GET' && key) {
+    // S3 规范: canonicalUri 不做 URI 编码，用原始 key
     const canonicalUri = `/${bucket}/${key}`
     const signed = await signV4('GET', bucket, canonicalUri, {}, {}, null, env)
 
-    const res = await fetch(`${endpoint}${signed.requestUrl}`, { method: 'GET', headers: signed.headers })
+    const s3Url = `${endpoint}${signed.requestUrl}`
+    console.log('S3 GET object:', s3Url, 'origKey:', key)
+
+    const res = await fetch(s3Url, { method: 'GET', headers: signed.headers })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error('S3 GET object error:', res.status, errText)
+      return new Response(JSON.stringify({ error: `S3 error: ${res.status}`, key, detail: errText }), {
+        status: res.status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
     const newHeaders = new Headers()
     const ct = res.headers.get('content-type')
@@ -246,8 +265,8 @@ export async function onRequest(context) {
 
     if (body.action === 'copy' && body.src && body.dst) {
       // GET src → PUT dst
-      const srcUri = `/${bucket}/${body.src}`
-      const srcSigned = await signV4('GET', bucket, srcUri, {}, {}, null, env)
+      const srcCanonicalUri = `/${bucket}/${body.src}`
+      const srcSigned = await signV4('GET', bucket, srcCanonicalUri, {}, {}, null, env)
       const srcRes = await fetch(`${endpoint}${srcSigned.requestUrl}`, {
         method: 'GET', headers: srcSigned.headers,
       })
@@ -259,8 +278,8 @@ export async function onRequest(context) {
       const srcBody = await srcRes.arrayBuffer()
       const srcCt = srcRes.headers.get('content-type') || 'application/octet-stream'
 
-      const dstUri = `/${bucket}/${body.dst}`
-      const dstSigned = await signV4('PUT', bucket, dstUri, {}, { 'Content-Type': srcCt }, srcBody, env)
+      const dstCanonicalUri = `/${bucket}/${body.dst}`
+      const dstSigned = await signV4('PUT', bucket, dstCanonicalUri, {}, { 'Content-Type': srcCt }, srcBody, env)
       dstSigned.headers['Content-Type'] = srcCt
 
       const dstRes = await fetch(`${endpoint}${dstSigned.requestUrl}`, {
