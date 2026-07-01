@@ -5,9 +5,9 @@
 import { verifyAuth } from '../_auth.js'
 
 // === AWS Signature V4 签名 ===
-// S3 规范: canonical URI 不做 URI 编码（S3 特殊规则）
-// 只需把路径中的多个连续 / 标准化为单个 /
-// - 实际请求 URL: 路径部分需要 URI 编码（但 / 不编码）
+// R2 S3 兼容实现要求 canonical URI 做 URI 编码（/ 不编码）
+// 注意: 这与 AWS S3 文档规范不同（AWS S3 不编码 canonical URI），但 R2 的行为是编码
+// - canonicalUri: 原始未编码的路径（传入参数），签名计算时自动编码
 // - canonicalQuerystring: 查询参数必须按 key 排序，key/value 分别 URI 编码
 
 async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, body, env) {
@@ -43,10 +43,14 @@ async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, b
     .map(k => `${k}:${allHeaders[k]?.toString().trim()}`)
     .join('\n') + '\n'
 
-  // Canonical Request (S3: canonicalUri 不编码)
+  // R2 S3 兼容: canonicalUri 需要 URI 编码（/ 不编码）
+  // 这与 AWS S3 规范不同（AWS S3 不编码），但 R2 的实现要求编码
+  const encodedCanonicalUri = canonicalUri.split('/').map(s => encodeURIComponent(s)).join('/')
+
+  // Canonical Request
   const canonicalRequest = [
     method,
-    canonicalUri,
+    encodedCanonicalUri,
     canonicalQuerystring,
     canonicalHeaders,
     signedHeadersStr,
@@ -68,12 +72,11 @@ async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, b
   const requestHeaders = { ...allHeaders, Authorization: authHeader }
   delete requestHeaders.host // fetch 会自动设置 host
 
-  // 构建实际请求 URL（路径部分 URI 编码，/ 不编码）
-  const requestPath = canonicalUri.split('/').map(s => encodeURIComponent(s)).join('/')
+  // 实际请求 URL: 路径部分也用编码后的 canonicalUri
   const queryString = sortedKeys
     .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
     .join('&')
-  const requestUrl = queryString ? `${requestPath}?${queryString}` : requestPath
+  const requestUrl = queryString ? `${encodedCanonicalUri}?${queryString}` : encodedCanonicalUri
 
   return { host, headers: requestHeaders, requestUrl }
 }
