@@ -12,7 +12,6 @@
       <button class="win-toolbar-btn" @click="goForward" :disabled="!canGoForward">➡</button>
       <button class="win-toolbar-btn" @click="goUp" :disabled="!canGoUp">⬆</button>
       <button class="win-toolbar-btn" @click="refresh">🔄</button>
-      <!-- 桶选择器 -->
       <select class="bucket-select" v-model="currentBucket" @change="onBucketChange">
         <option value="" disabled>选择存储桶...</option>
         <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }} ({{ b.location || '?' }})</option>
@@ -21,7 +20,8 @@
         <input v-model="addressInput" @keydown.enter="navigateTo(addressInput)" placeholder="输入路径..." />
       </div>
       <button class="win-toolbar-btn primary" @click="showUploadModal = true" :disabled="!currentBucket">⬆ 上传</button>
-      <button class="win-toolbar-btn" @click="showNewFolderModal = true" :disabled="!currentBucket">📁 新建文件夹</button>
+      <button class="win-toolbar-btn" @click="showNewFolderModal = true" :disabled="!currentBucket">📁 新建</button>
+      <button class="win-toolbar-btn danger" @click="deleteSelectedItems" :disabled="!selectedItems.length || !currentBucket">🗑 删除</button>
       <button class="win-toolbar-btn" @click="toggleView">{{ viewMode === 'detail' ? '🔲 网格' : '📋 详情' }}</button>
     </div>
 
@@ -44,7 +44,6 @@
           </div>
         </div>
 
-        <!-- 当前桶目录树 -->
         <div v-if="currentBucket" class="sidebar-section">
           <div class="sidebar-title">目录树</div>
           <div class="tree-node" @click="navigateTo('')" :class="{ active: currentPath === '' }">
@@ -65,16 +64,13 @@
 
       <!-- 内容区 -->
       <div class="win-content" @contextmenu.prevent="onContentContextMenu" @click="clearSelection">
-        <!-- 未选择桶 -->
         <div v-if="!currentBucket" class="empty-state">
           <span class="icon" style="font-size:64px">🗄️</span>
           <span class="text" style="font-size:16px">请从左侧选择一个存储桶，或创建新存储桶</span>
         </div>
 
-        <!-- Loading -->
         <div v-else-if="loading" class="loading">加载中...</div>
 
-        <!-- 空状态 -->
         <div v-else-if="items.length === 0" class="empty-state">
           <span class="icon">📂</span>
           <span class="text">此文件夹为空</span>
@@ -83,21 +79,32 @@
         <!-- 详情视图 -->
         <div v-else-if="viewMode === 'detail'" class="detail-view">
           <div class="detail-header">
-            <span class="col name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}</span>
-            <span class="col size" @click="sortBy('size')">大小 {{ sortIndicator('size') }}</span>
-            <span class="col date" @click="sortBy('date')">修改日期 {{ sortIndicator('date') }}</span>
-            <span class="col type" @click="sortBy('type')">类型 {{ sortIndicator('type') }}</span>
+            <span class="col col-icon"></span>
+            <span class="col col-name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}</span>
+            <span class="col col-size" @click="sortBy('size')">大小 {{ sortIndicator('size') }}</span>
+            <span class="col col-date" @click="sortBy('date')">修改日期 {{ sortIndicator('date') }}</span>
+            <span class="col col-type" @click="sortBy('type')">类型 {{ sortIndicator('type') }}</span>
+            <span class="col col-actions">操作</span>
           </div>
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
-            class="file-item" :class="{ selected: isSelected(item) }"
+            class="file-row" :class="{ selected: isSelected(item), folder: item.prefix !== undefined }"
             @click.stop="selectItem(item)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
-            <span class="icon">{{ itemIcon(item) }}</span>
-            <span class="name">{{ item.name }}</span>
-            <span class="size">{{ item.size ? formatSize(item.size) : '' }}</span>
-            <span class="date">{{ item.lastModified ? formatDate(item.lastModified) : '' }}</span>
-            <span class="type">{{ itemType(item) }}</span>
+            <span class="col col-icon">{{ itemIcon(item) }}</span>
+            <span class="col col-name">{{ item.name }}</span>
+            <span class="col col-size">{{ item.size ? formatSize(item.size) : '' }}</span>
+            <span class="col col-date">{{ item.lastModified ? formatDate(item.lastModified) : '' }}</span>
+            <span class="col col-type">{{ itemType(item) }}</span>
+            <span class="col col-actions">
+              <template v-if="item.prefix === undefined">
+                <button class="action-btn" @click.stop="downloadItem(item)" title="下载">⬇</button>
+                <button class="action-btn danger" @click.stop="deleteSingleItem(item)" title="删除">🗑</button>
+              </template>
+              <template v-else>
+                <button class="action-btn danger" @click.stop="deleteSingleItem(item)" title="删除文件夹">🗑</button>
+              </template>
+            </span>
           </div>
         </div>
 
@@ -110,6 +117,10 @@
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="icon">{{ itemIcon(item) }}</span>
             <span class="name">{{ item.name }}</span>
+            <div class="grid-actions" v-if="item.prefix === undefined">
+              <button class="action-btn small" @click.stop="downloadItem(item)" title="下载">⬇</button>
+              <button class="action-btn small danger" @click.stop="deleteSingleItem(item)" title="删除">🗑</button>
+            </div>
           </div>
         </div>
       </div>
@@ -127,13 +138,13 @@
     <div v-if="contextMenu.visible" class="context-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
       <template v-if="contextMenu.target === 'item'">
         <div class="context-menu-item" @click="openItem(contextMenu.item)">📂 打开</div>
-        <div class="context-menu-item" @click="downloadItem(contextMenu.item)">⬇ 下载</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="downloadItem(contextMenu.item)">⬇ 下载</div>
         <div class="context-menu-sep" />
-        <div class="context-menu-item" @click="showRenameModal = true; renameTarget = contextMenu.item">✏️ 重命名</div>
-        <div class="context-menu-item" @click="showCopyModal = true; copyTarget = contextMenu.item">📋 复制到...</div>
-        <div class="context-menu-item" @click="showMoveModal = true; moveTarget = contextMenu.item">📦 移动到...</div>
+        <div class="context-menu-item" @click="showRenameModal = true; renameTarget = contextMenu.item; renameNewName = contextMenu.item.name">✏️ 重命名</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="showCopyModal = true; copyTarget = contextMenu.item">📋 复制到...</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="showMoveModal = true; moveTarget = contextMenu.item">📦 移动到...</div>
         <div class="context-menu-sep" />
-        <div class="context-menu-item danger" @click="deleteSelected">🗑️ 删除</div>
+        <div class="context-menu-item danger" @click="deleteSingleItem(contextMenu.item)">🗑️ 删除</div>
       </template>
       <template v-if="contextMenu.target === 'content'">
         <div class="context-menu-item" @click="showUploadModal = true">⬆ 上传文件</div>
@@ -220,7 +231,12 @@
       <div class="modal-box">
         <div class="modal-header">确认删除</div>
         <div class="modal-body">
-          <p>确定要删除 {{ deleteTargets.length }} 个项目吗？此操作不可撤销。</p>
+          <p>确定要删除以下 {{ deleteTargets.length }} 个项目吗？此操作不可撤销。</p>
+          <div class="delete-list">
+            <div v-for="t in deleteTargets" :key="t.key||t.prefix" class="delete-item">
+              {{ itemIcon(t) }} {{ t.name }}
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="modal-btn" @click="showDeleteModal = false">取消</button>
@@ -254,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import r2client from '../api/r2client.js'
 import TreeNode from '../components/TreeNode.vue'
@@ -271,8 +287,8 @@ const newBucketLocation = ref('apac')
 // === 导航状态 ===
 const currentPath = ref('')
 const addressInput = ref('')
-const history = ref([''])
-const historyIndex = ref(0)
+const navHistory = ref([''])
+const navHistoryIdx = ref(0)
 const loading = ref(false)
 const expandedFolders = ref(new Set())
 
@@ -284,7 +300,7 @@ const sortField = ref('name')
 const sortOrder = ref('asc')
 const selectedItems = ref([])
 
-// === UI 模态框 ===
+// === 模态框 ===
 const showUploadModal = ref(false)
 const showNewFolderModal = ref(false)
 const showRenameModal = ref(false)
@@ -324,9 +340,9 @@ const sortedItems = computed(() => {
 })
 const totalSize = computed(() => files.value.reduce((s, f) => s + (f.size || 0), 0))
 const currentPathDisplay = computed(() => currentPath.value ? '/' + currentPath.value : '/')
-const rootFolders = computed(() => folders.value.filter(f => !f.prefix.includes('/')))
-const canGoBack = computed(() => historyIndex.value > 0)
-const canGoForward = computed(() => historyIndex.value < history.value.length - 1)
+const rootFolders = computed(() => folders.value)
+const canGoBack = computed(() => navHistoryIdx.value > 0)
+const canGoForward = computed(() => navHistoryIdx.value < navHistory.value.length - 1)
 const canGoUp = computed(() => currentPath.value !== '')
 
 // === 格式化 ===
@@ -374,21 +390,16 @@ async function loadBuckets() {
     buckets.value = data.buckets || []
   } catch (e) { console.error(e) }
 }
-
 function switchBucket(name) {
   currentBucket.value = name
   r2client.setBucket(name)
   currentPath.value = ''
   addressInput.value = ''
-  history.value = ['']
-  historyIndex.value = 0
+  navHistory.value = ['']
+  navHistoryIdx.value = 0
   loadDirectory('')
 }
-
-function onBucketChange() {
-  switchBucket(currentBucket.value)
-}
-
+function onBucketChange() { switchBucket(currentBucket.value) }
 async function doCreateBucket() {
   if (!newBucketName.value) return
   try {
@@ -396,15 +407,13 @@ async function doCreateBucket() {
     await loadBuckets()
     switchBucket(newBucketName.value)
   } catch (e) { console.error(e) }
-  showCreateBucketModal.value = false
-  newBucketName.value = ''
+  showCreateBucketModal.value = false; newBucketName.value = ''
 }
 
 // === 目录加载 ===
 async function loadDirectory(prefix = '') {
   if (!currentBucket.value) return
-  loading.value = true
-  selectedItems.value = []
+  loading.value = true; selectedItems.value = []
   try {
     const data = await r2client.listObjects(currentBucket.value, prefix, '/')
     folders.value = (data.prefixes || []).map(p => ({ prefix: p, name: p.replace(prefix, '').replace(/\/$/, '') }))
@@ -417,27 +426,65 @@ async function loadDirectory(prefix = '') {
     console.error(e)
   } finally { loading.value = false }
 }
-
 async function navigateTo(prefix) {
-  currentPath.value = prefix
-  addressInput.value = prefix
-  const newH = history.value.slice(0, historyIndex.value + 1)
+  currentPath.value = prefix; addressInput.value = prefix
+  const newH = navHistory.value.slice(0, navHistoryIdx.value + 1)
   newH.push(prefix)
-  history.value = newH
-  historyIndex.value = newH.length - 1
+  navHistory.value = newH; navHistoryIdx.value = newH.length - 1
   await loadDirectory(prefix)
 }
-
-function goBack() { if (!canGoBack.value) return; historyIndex.value--; currentPath.value = history.value[historyIndex.value]; addressInput.value = currentPath.value; loadDirectory(currentPath.value) }
-function goForward() { if (!canGoForward.value) return; historyIndex.value++; currentPath.value = history.value[historyIndex.value]; addressInput.value = currentPath.value; loadDirectory(currentPath.value) }
+function goBack() { if (!canGoBack.value) return; navHistoryIdx.value--; currentPath.value = navHistory.value[navHistoryIdx.value]; addressInput.value = currentPath.value; loadDirectory(currentPath.value) }
+function goForward() { if (!canGoForward.value) return; navHistoryIdx.value++; currentPath.value = navHistory.value[navHistoryIdx.value]; addressInput.value = currentPath.value; loadDirectory(currentPath.value) }
 function goUp() { if (!canGoUp.value) return; const parts = currentPath.value.split('/').filter(Boolean); parts.pop(); navigateTo(parts.join('/') + (parts.length ? '/' : '')) }
 function refresh() { loadDirectory(currentPath.value) }
 function openItem(item) { item.prefix !== undefined ? navigateTo(item.prefix) : downloadItem(item) }
+
+// === 下载 ===
 function downloadItem(item) {
-  const url = r2client.getDownloadUrl(currentBucket.value, item.key)
+  // 通过后端代理下载，带 Authorization header
+  const url = `/api/s3/${currentBucket.value}/${encodeURIComponent(item.key)}`
   const a = document.createElement('a')
-  a.href = url; a.download = item.name; a.target = '_blank'
-  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  a.href = url
+  // 后端会对非可预览类型设置 Content-Disposition: attachment
+  // 对于可预览类型（图片等），我们仍强制下载
+  a.setAttribute('download', item.name)
+  // 需要带认证 token
+  // 用 fetch + blob 方式确保带 auth header 且触发下载
+  fetchWithAuth(url).then(blob => {
+    const blobUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = item.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(blobUrl)
+  }).catch(e => console.error('Download failed:', e))
+}
+
+async function fetchWithAuth(url) {
+  const headers = {}
+  if (r2client.authToken) headers['Authorization'] = `Bearer ${r2client.authToken}`
+  const res = await fetch(url, { headers })
+  if (!res.ok) throw new Error(`Download error: ${res.status}`)
+  return res.blob()
+}
+
+// === 删除 ===
+function deleteSingleItem(item) {
+  deleteTargets.value = [item]
+  showDeleteModal.value = true
+}
+function deleteSelectedItems() {
+  if (!selectedItems.value.length) return
+  deleteTargets.value = [...selectedItems.value]
+  showDeleteModal.value = true
+}
+async function confirmDelete() {
+  if (!currentBucket.value) return
+  const keys = deleteTargets.value.map(i => i.key || i.prefix)
+  try { await r2client.deleteObjects(currentBucket.value, keys) } catch(e) { console.error(e) }
+  showDeleteModal.value = false; deleteTargets.value = []; selectedItems.value = []; refresh()
 }
 
 // === 右键菜单 ===
@@ -446,7 +493,7 @@ function onRootContextMenu(e) { contextMenu.value = { visible:true, x:e.clientX,
 function onContentContextMenu(e) { contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'content', item:null } }
 function onItemContextMenu(item, e) { if (!isSelected(item)) selectedItems.value = [item]; contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'item', item } }
 
-// === 操作 ===
+// === 其他操作 ===
 async function doUpload() {
   if (!uploadFiles.value.length || !currentBucket.value) return
   uploading.value = true; uploadProgress.value = 0
@@ -484,13 +531,6 @@ async function doCopyMove() {
   } catch(e) { console.error(e) }
   showCopyModal.value = false; showMoveModal.value = false; copyMoveTarget.value = ''; refresh()
 }
-function deleteSelected() { deleteTargets.value = selectedItems.value.length ? selectedItems.value : [contextMenu.value.item]; showDeleteModal.value = true }
-async function confirmDelete() {
-  if (!currentBucket.value) return
-  const keys = deleteTargets.value.map(i => i.key || i.prefix)
-  try { await r2client.deleteObjects(currentBucket.value, keys) } catch(e) { console.error(e) }
-  showDeleteModal.value = false; deleteTargets.value = []; selectedItems.value = []; refresh()
-}
 
 // === 初始化 ===
 onMounted(async () => {
@@ -514,5 +554,66 @@ onMounted(async () => {
 .upload-file-item { display:flex; align-items:center; justify-content:space-between; padding:4px 8px; font-size:13px; border-bottom:1px solid var(--win-border); }
 .modal-input { height:36px; border:1px solid var(--win-border); border-radius:6px; padding:0 12px; font-size:14px; outline:none; width:100%; }
 .modal-input:focus { border-color:var(--win-accent); }
+.delete-list { margin-top:8px; max-height:200px; overflow-y:auto; }
+.delete-item { padding:3px 0; font-size:13px; }
+
+/* 详情视图 — 列对齐：header 和 row 用完全相同的列宽 */
 .detail-view { height:100%; overflow-y:auto; }
+
+.detail-header {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px 140px 100px 60px;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--win-bg);
+  border-bottom: 1px solid var(--win-border);
+  font-size: 12px;
+  color: var(--win-text-secondary);
+  user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.detail-header .col { cursor: pointer; padding: 2px 4px; }
+.detail-header .col-icon { cursor: default; }
+
+.file-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 80px 140px 100px 60px;
+  align-items: center;
+  padding: 2px 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.1s;
+  font-size: 13px;
+  min-height: 26px;
+}
+
+.file-row:hover { background: #e5f3ff; }
+.file-row.selected { background: var(--win-selected); border-color: var(--win-selected-border); }
+
+.file-row .col-icon { font-size: 16px; text-align: center; }
+.file-row .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row .col-size, .file-row .col-date, .file-row .col-type { color: var(--win-text-secondary); font-size: 12px; }
+
+.col-actions { display: flex; gap: 2px; justify-content: center; }
+
+.action-btn {
+  width: 22px; height: 22px;
+  border: 1px solid transparent; border-radius: 3px;
+  background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--win-text);
+  transition: all 0.15s;
+}
+.action-btn:hover { background: #e5e5e5; border-color: var(--win-border); }
+.action-btn.danger { color: var(--win-danger); }
+.action-btn.danger:hover { background: #fde; border-color: #e81123; }
+.action-btn.small { width: 18px; height: 18px; font-size: 10px; }
+
+/* 网格视图中的操作按钮 */
+.grid-actions {
+  display: flex; gap: 2px; margin-top: 2px;
+}
 </style>
