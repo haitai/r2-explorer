@@ -82,16 +82,11 @@
         <!-- 详情视图 -->
         <div v-else-if="viewMode === 'detail'" class="detail-view">
           <div class="detail-header" :style="detailGridStyle">
-            <span class="col col-icon" @click.stop></span>
-            <span class="resize-handle" @mousedown.prevent="startResize('icon', $event)"></span>
-            <span class="col col-name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}</span>
-            <span class="resize-handle" @mousedown.prevent="startResize('name', $event)"></span>
-            <span class="col col-size" @click="sortBy('size')">大小 {{ sortIndicator('size') }}</span>
-            <span class="resize-handle" @mousedown.prevent="startResize('size', $event)"></span>
-            <span class="col col-date" @click="sortBy('date')">修改日期 {{ sortIndicator('date') }}</span>
-            <span class="resize-handle" @mousedown.prevent="startResize('date', $event)"></span>
-            <span class="col col-type" @click="sortBy('type')">类型 {{ sortIndicator('type') }}</span>
-            <span class="resize-handle" @mousedown.prevent="startResize('type', $event)"></span>
+            <span class="col col-icon"></span>
+            <span class="col col-name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}<span class="resize-handle" @mousedown.prevent="startResize('name', $event)" /></span>
+            <span class="col col-size" @click="sortBy('size')">大小 {{ sortIndicator('size') }}<span class="resize-handle" @mousedown.prevent="startResize('size', $event)" /></span>
+            <span class="col col-date" @click="sortBy('date')">修改日期 {{ sortIndicator('date') }}<span class="resize-handle" @mousedown.prevent="startResize('date', $event)" /></span>
+            <span class="col col-type" @click="sortBy('type')">类型 {{ sortIndicator('type') }}<span class="resize-handle" @mousedown.prevent="startResize('type', $event)" /></span>
             <span class="col col-actions">操作</span>
           </div>
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
@@ -101,15 +96,10 @@
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="col col-icon">{{ itemIcon(item) }}</span>
-            <span class="resize-handle-ghost"></span>
             <span class="col col-name">{{ item.name }}</span>
-            <span class="resize-handle-ghost"></span>
             <span class="col col-size">{{ item.size ? formatSize(item.size) : '' }}</span>
-            <span class="resize-handle-ghost"></span>
             <span class="col col-date">{{ item.lastModified ? formatDate(item.lastModified) : '' }}</span>
-            <span class="resize-handle-ghost"></span>
             <span class="col col-type">{{ itemType(item) }}</span>
-            <span class="resize-handle-ghost"></span>
             <span class="col col-actions">
               <template v-if="item.prefix === undefined">
                 <button class="action-btn" v-if="isPreviewable(item)" @click.stop="previewItem(item)" title="预览">👁</button>
@@ -346,8 +336,7 @@ if (savedWidths) {
 }
 const detailGridStyle = computed(() => {
   const w = colWidths.value
-  // grid: col + resize-handle (4px) 交替排列
-  return { gridTemplateColumns: `${w.icon}px 4px ${w.name}px 4px ${w.size}px 4px ${w.date}px 4px ${w.type}px 4px ${w.actions}px` }
+  return { gridTemplateColumns: `${w.icon}px ${w.name}px ${w.size}px ${w.date}px ${w.type}px ${w.actions}px` }
 })
 const resizingCol = ref(null)
 const resizeStartX = ref(0)
@@ -665,26 +654,29 @@ onMounted(async () => {
 .detail-header .col-actions { cursor: default; text-align: center; }
 
 /* 列宽拖拽手柄 — 仅在 header 中显示 */
-.resize-handle {
-  width: 4px;
+/* 列宽拖拽手柄 — 嵌套在 header 列右边界 */
+.col { position: relative; }
+.detail-header .resize-handle {
+  position: absolute;
+  top: 0; bottom: 0;
+  right: -5px; /* 跨越列右边界 */
+  width: 10px;
   cursor: col-resize;
-  position: relative;
-  z-index: 2;
+  z-index: 3;
+  /* 手柄本身透明 */
 }
-.resize-handle::after {
+.detail-header .resize-handle::after {
   content: '';
   position: absolute;
   top: 0; bottom: 0;
-  left: -2px; right: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s;
 }
-.resize-handle:hover::after,
-.resize-handle:active::after {
-  background: var(--win-accent);
-}
-
-/* file-row 中的占位 ghost（保持 grid 对齐，不可见不可交互） */
-.resize-handle-ghost {
-  width: 4px;
+.detail-header .resize-handle:hover::after {
+  background: rgba(0, 90, 158, 0.5);
 }
 
 .file-row {
