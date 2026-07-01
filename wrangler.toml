@@ -2,10 +2,13 @@ name = "r2-explorer"
 compatibility_date = "2026-06-20"
 pages_build_output_dir = "dist"
 
-[vars]
-# AUTH_PASSWORD 留空则无需密码，建议在 Dashboard 设置为加密环境变量
-AUTH_PASSWORD = ""
-
-# CF_ACCOUNT_ID — Cloudflare 账户 ID（在 Dashboard 右侧栏可看到）
-# CF_API_TOKEN — Cloudflare API Token（需要 R2 读写权限）
-# 以上两个建议在 Dashboard 设置为加密环境变量，不要写在 wrangler.toml 中
+# 所有环境变量均在 Cloudflare Dashboard → Pages 项目 → 设置 → 环境变量 中配置（加密变量）
+# 不要在 wrangler.toml 中设置敏感值
+#
+# 必填:
+#   CF_ACCOUNT_ID        — Cloudflare 账户 ID
+#   CF_API_TOKEN         — Cloudflare API Token (Account R2 Read & Write)
+#   R2_ACCESS_KEY_ID     — R2 S3 API Access Key
+#   R2_SECRET_ACCESS_KEY — R2 S3 API Secret Key
+# 可选:
+#   AUTH_PASSWORD        — 访问密码（留空或不设置则无需登录）
