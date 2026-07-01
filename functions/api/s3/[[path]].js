@@ -24,11 +24,15 @@ async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, b
 
   const payloadHash = body ? await sha256Hex(body) : 'UNSIGNED-PAYLOAD'
 
+  // AWS V4 规范: 所有 header name 必须小写
   const allHeaders = {
     host,
     'x-amz-date': amzDate,
     'x-amz-content-sha256': payloadHash,
-    ...(extraHeaders || {}),
+  }
+  // extraHeaders 中的 key 统一转为小写
+  for (const [k, v] of Object.entries(extraHeaders || {})) {
+    allHeaders[k.toLowerCase()] = v
   }
 
   // 构建规范查询字符串（参数按 key 字典序排列，key/value 分别 URI 编码）
@@ -223,9 +227,9 @@ export async function onRequest(context) {
     // （Workers 环境下 body 可能被修改，如 Content-Length 不匹配）
     const canonicalUri = `/${bucket}/${key}`
     const signed = await signV4('PUT', bucket, canonicalUri, {}, {
-      'Content-Type': contentType,
+      'content-type': contentType,
     }, null, env) // body=null → UNSIGNED-PAYLOAD
-    signed.headers['Content-Type'] = contentType
+    // fetch 会自动处理 content-type，无需再次设置
 
     console.log('S3 PUT:', key, 'size:', bodyBuffer.byteLength, 'contentType:', contentType)
 
@@ -306,8 +310,8 @@ export async function onRequest(context) {
       const srcCt = srcRes.headers.get('content-type') || 'application/octet-stream'
 
       const dstCanonicalUri = `/${bucket}/${body.dst}`
-      const dstSigned = await signV4('PUT', bucket, dstCanonicalUri, {}, { 'Content-Type': srcCt }, null, env) // UNSIGNED-PAYLOAD
-      dstSigned.headers['Content-Type'] = srcCt
+      const dstSigned = await signV4('PUT', bucket, dstCanonicalUri, {}, { 'content-type': srcCt }, null, env) // UNSIGNED-PAYLOAD
+      // fetch 会自动处理 content-type
 
       const dstRes = await fetch(`${endpoint}${dstSigned.requestUrl}`, {
         method: 'PUT', headers: dstSigned.headers, body: srcBody,
