@@ -2,7 +2,6 @@
 // 使用 CF_ACCOUNT_ID + CF_API_TOKEN 通过 Cloudflare API 管理桶级别操作
 
 import { verifyAuth } from './_auth.js'
-import { signV4 } from './s3/_sign.js'
 
 const CF_API_BASE = 'https://api.cloudflare.com/client/v4'
 
@@ -11,6 +10,55 @@ function cfHeaders(env) {
     'Authorization': `Bearer ${env.CF_API_TOKEN}`,
     'Content-Type': 'application/json',
   }
+}
+
+// 内联签名（避免跨目录 import 打包问题）
+async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, body, env) {
+  const accessKey = env.R2_ACCESS_KEY_ID
+  const secretKey = env.R2_SECRET_ACCESS_KEY
+  const accountId = env.CF_ACCOUNT_ID
+  const host = `${accountId}.r2.cloudflarestorage.com`
+  const now = new Date()
+  const amzDate = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  const dateStamp = amzDate.slice(0, 8)
+  const payloadHash = body ? await sha256Hex(body) : 'UNSIGNED-PAYLOAD'
+  const allHeaders = { host, 'x-amz-date': amzDate, 'x-amz-content-sha256': payloadHash }
+  for (const [k, v] of Object.entries(extraHeaders || {})) allHeaders[k.toLowerCase()] = v
+  const sortedKeys = Object.keys(queryParams || {}).sort()
+  const signedHeaderKeys = Object.keys(allHeaders).sort()
+  const signedHeadersStr = signedHeaderKeys.join(';')
+  const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${allHeaders[k]?.toString().trim()}`).join('\n') + '\n'
+  const encodedCanonicalUri = canonicalUri.split('/').map(s => encodeURIComponent(s)).join('/')
+  const canonicalQuerystring = sortedKeys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`).join('&')
+  const canonicalRequest = [method, encodedCanonicalUri, canonicalQuerystring, canonicalHeaders, signedHeadersStr, payloadHash].join('\n')
+  const credentialScope = `${dateStamp}/auto/s3/aws4_request`
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, await sha256Hex(canonicalRequest)].join('\n')
+  const signingKey = await hmacChain(secretKey, dateStamp)
+  const signature = await hmacHex(signingKey, stringToSign)
+  const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeadersStr}, Signature=${signature}`
+  const requestHeaders = { ...allHeaders, Authorization: authHeader }
+  delete requestHeaders.host
+  const queryString = sortedKeys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`).join('&')
+  const requestUrl = queryString ? `${encodedCanonicalUri}?${queryString}` : encodedCanonicalUri
+  return { headers: requestHeaders, requestUrl }
+}
+async function sha256Hex(data) {
+  if (typeof data === 'string') data = new TextEncoder().encode(data)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return bufToHex(hash)
+}
+function bufToHex(buf) { return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('') }
+async function hmacSha256(key, data) {
+  if (typeof key === 'string') key = new TextEncoder().encode(key)
+  if (typeof data === 'string') data = new TextEncoder().encode(data)
+  const ck = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return await crypto.subtle.sign('HMAC', ck, data)
+}
+async function hmacHex(key, data) { return bufToHex(await hmacSha256(key, data)) }
+async function hmacChain(secretKey, date) {
+  let k = await hmacSha256('AWS4' + secretKey, date)
+  k = await hmacSha256(k, 'auto'); k = await hmacSha256(k, 's3'); k = await hmacSha256(k, 'aws4_request')
+  return k
 }
 
 export async function onRequestGet(context) {
@@ -61,10 +109,8 @@ export async function onRequestGet(context) {
         })
         if (!res.ok) return { name: b.name, objectCount: null }
         const xml = await res.text()
-        const truncated = xml.includes('<IsTruncated>true</IsTruncated>')
-        // 只有 IsTruncated=true 才说明有对象；如果返回空结果（无 Contents），也是空的
-        const hasObjects = xml.includes('<Contents>')
-        return { name: b.name, objectCount: truncated || hasObjects ? '?' : 0 }
+        const hasObjects = /<Contents>/.test(xml)
+        return { name: b.name, objectCount: hasObjects ? '?' : 0 }
       } catch {
         return { name: b.name, objectCount: null }
       }
