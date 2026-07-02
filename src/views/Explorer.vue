@@ -931,7 +931,7 @@ onUnmounted(() => {
 /* 网格视图 */
 .grid-view {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 12px;
   padding: 12px;
   align-content: start;
