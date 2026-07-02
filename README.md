@@ -1,3 +1,9 @@
+<div align="center">
+  <img src="/preview.png" alt="界面预览" />
+</div>
+
+---
+
 # R2 Explorer
 
 模仿 Windows 文件资源管理器界面，**统一管理 Cloudflare 账号下所有 R2 存储桶**。
