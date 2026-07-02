@@ -510,6 +510,8 @@ function onContentMouseDown(e) {
   sel.value.endY = e.clientY
   // 清除已有选择（框选从空白开始，行为和按住 Ctrl 不同）
   if (!e.ctrlKey && !e.metaKey) clearSelection()
+  // 防止拖拽时浏览器选中文字
+  document.body.style.userSelect = 'none'
   // 监听全局 mousemove/mouseup
   document.addEventListener('mousemove', onDocMouseMove, { passive: true })
   document.addEventListener('mouseup', onDocMouseUp)
@@ -543,6 +545,7 @@ function onDocMouseMove(e) {
 }
 function onDocMouseUp() {
   sel.value.isSelecting = false
+  document.body.style.userSelect = ''
   document.removeEventListener('mousemove', onDocMouseMove)
   document.removeEventListener('mouseup', onDocMouseUp)
 }
