@@ -72,8 +72,8 @@
         @mousedown="onContentMouseDown"
         @mouseup="onContentMouseUp">
 
-        <!-- 框选矩形 -->
-        <div v-if="sel.isSelecting" class="selection-box" :style="selBoxStyle"></div>
+        <!-- 框选矩形（用于网格视图） -->
+        <div v-if="sel.isSelecting && viewMode === 'grid'" class="selection-box" :style="selBoxStyle"></div>
         <div v-if="!currentBucket" class="empty-state">
           <span class="icon" style="font-size:64px">🗄️</span>
           <span class="text" style="font-size:16px">请从左侧选择一个存储桶，或创建新存储桶</span>
@@ -87,7 +87,9 @@
         </div>
 
         <!-- 详情视图 -->
-        <div v-else-if="viewMode === 'detail'" class="detail-view">
+        <div v-else-if="viewMode === 'detail'" class="detail-view" ref="detailView">
+          <!-- 框选矩形（用于详情视图） -->
+          <div v-if="sel.isSelecting" class="selection-box" :style="selBoxStyle"></div>
           <div class="detail-header" :style="detailGridStyle">
             <span class="col col-icon"></span>
             <span class="col col-name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}<span class="resize-handle" @mousedown.prevent="startResize('name', $event)" /></span>
@@ -442,6 +444,7 @@ function clearSelection() { selectedItems.value = [] }
 
 // === 框选逻辑 ===
 const winContent = ref(null)
+const detailView = ref(null)
 const sel = ref({ isSelecting: false, startX: 0, startY: 0, endX: 0, endY: 0 })
 
 const selBoxStyle = computed(() => {
@@ -452,7 +455,25 @@ const selBoxStyle = computed(() => {
   const width = Math.abs(endX - startX)
   const height = Math.abs(endY - startY)
   if (width < 4 && height < 4) return { display: 'none' }
-  return { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` }
+
+  // 详情视图：用容器相对坐标
+  if (viewMode.value === 'detail' && detailView.value) {
+    const rect = detailView.value.getBoundingClientRect()
+    return {
+      left: `${left - rect.left}px`,
+      top: `${top - rect.top}px`,
+      width: `${width}px`,
+      height: `${height}px`
+    }
+  }
+  // 网格视图：viewport 绝对坐标（position: absolute 相对 win-content）
+  const winRect = winContent.value?.getBoundingClientRect() ?? { left: 0, top: 0 }
+  return {
+    left: `${left - winRect.left}px`,
+    top: `${top - winRect.top}px`,
+    width: `${width}px`,
+    height: `${height}px`
+  }
 })
 
 // 获取容器内某点的 item-key
@@ -771,7 +792,7 @@ onUnmounted(() => {
 .delete-item { padding:3px 0; font-size:13px; }
 
 /* 详情视图 — 可调节列宽 */
-.detail-view { height:100%; overflow-y:auto; }
+.detail-view { height:100%; overflow-y:auto; position: relative; }
 
 .detail-header {
   display: grid;
