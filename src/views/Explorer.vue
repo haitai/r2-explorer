@@ -145,7 +145,7 @@
     </div>
 
     <!-- 详情操作菜单 -->
-    <div v-if="actionMenu.visible" class="action-menu" :style="{ left: actionMenu.x + 'px', top: actionMenu.y + 'px' }" @click.stop>
+    <div v-if="actionMenu.visible" class="action-menu" :style="{ right: actionMenu.right + 'px', top: actionMenu.y + 'px' }" @click.stop>
       <div v-if="actionMenu.item.prefix !== undefined" class="action-menu-item" @click="openItem(actionMenu.item)">📂 打开</div>
       <template v-if="actionMenu.item.prefix === undefined">
         <div v-if="isPreviewable(actionMenu.item)" class="action-menu-item" @click="previewItem(actionMenu.item); hideActionMenu()">👁 预览</div>
@@ -339,7 +339,7 @@ const moveTarget = ref(null)
 const copyMoveTarget = ref('')
 const deleteTargets = ref([])
 const contextMenu = ref({ visible: false, x: 0, y: 0, target: '', item: null })
-const actionMenu = ref({ visible: false, x: 0, y: 0, item: null })
+const actionMenu = ref({ visible: false, right: 0, y: 0, item: null })
 
 // === 列宽调整 ===
 const DEFAULT_COL_WIDTHS = { icon: 28, name: 250, size: 80, date: 140, type: 100, actions: 70 }
@@ -728,7 +728,7 @@ function hideContextMenu() { contextMenu.value.visible = false; actionMenu.value
 function showActionMenu(item, e) {
   e.preventDefault()
   const rect = e.target.getBoundingClientRect()
-  actionMenu.value = { visible: true, x: rect.left, y: rect.bottom + 2, item }
+  actionMenu.value = { visible: true, right: window.innerWidth - rect.right, y: rect.bottom + 2, item }
   setTimeout(() => {
     const close = () => { actionMenu.value.visible = false; document.removeEventListener('click', close) }
     document.addEventListener('click', close)
