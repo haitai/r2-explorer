@@ -103,6 +103,7 @@
             :class="{ selected: isSelected(item), folder: item.prefix !== undefined }"
             :data-item-key="item.key || item.prefix"
             @mousedown.left.exact="onItemMouseDown(item, $event)"
+            @click="onItemClick(item, $event)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="col col-icon">{{ itemIcon(item) }}</span>
@@ -129,6 +130,7 @@
             class="grid-item" :class="{ selected: isSelected(item) }"
             :data-item-key="item.key || item.prefix"
             @mousedown.left.exact="onItemMouseDown(item, $event)"
+            @click="onItemClick(item, $event)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="icon">{{ itemIcon(item) }}</span>
@@ -552,23 +554,23 @@ function onContentMouseMove(e) {
   // 由 document 级别的 onDocMouseMove 处理，此处仅用于防止事件冒泡
 }
 
-// 文件项点击（单独处理，区别于框选）
-function onItemMouseDown(item, e) {
-  if (e.button !== 0) return
+// 文件项点击（单选）
+function onItemClick(item, e) {
   if (e.ctrlKey || e.metaKey) {
-    // Ctrl+点击：切换单个项的选中状态
-    e.preventDefault()
-    selectItem(item)
-    // 阻止后续 click 事件
-    const el = e.currentTarget
-    const handler = () => { selectItem(item); el.removeEventListener('click', handler) }
-    el.addEventListener('click', handler, { once: true })
+    e.stopPropagation()
+    selectItem(item) // toggle
   } else {
-    // 普通点击：如果当前未选中，则只选中它（清除其他）
+    // 普通点击：选中该项（不清除已选中的）
     if (!isSelected(item)) {
-      selectedItems.value = [item]
+      selectedItems.value = [...selectedItems.value, item]
     }
   }
+}
+
+// 文件项按下（仅用于开始框选，单选由 click 处理）
+function onItemMouseDown(item, e) {
+  if (e.button !== 0) return
+  // 单选逻辑移至 onItemClick 处理
 }
 
 // === 键盘快捷键 ===
