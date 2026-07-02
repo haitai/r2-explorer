@@ -17,7 +17,7 @@
       <button class="win-toolbar-btn" @click="refresh">🔄</button>
       <select class="bucket-select" v-model="currentBucket" @change="onBucketChange">
         <option value="" disabled>选择存储桶...</option>
-        <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }} ({{ b.location || '?' }})</option>
+        <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}{{ b.objectCount === 0 ? ' (空)' : b.objectCount === null ? '' : ' (' + b.objectCount + ')' }}</option>
       </select>
       <div class="win-addressbar">
         <input v-model="addressInput" @keydown.enter="navigateTo(addressInput)" placeholder="输入路径..." />
@@ -40,7 +40,7 @@
             @click="switchBucket(b.name)">
             <span class="icon">🗄️</span>
             <span>{{ b.name }}</span>
-            <span class="bucket-info">{{ b.location }}</span>
+            <span class="bucket-info">{{ b.objectCount === 0 ? '空' : b.objectCount ?? b.location }}</span>
           </div>
           <div class="tree-node add-bucket" @click="showCreateBucketModal = true">
             <span class="icon">➕</span> <span>新建存储桶</span>

@@ -2,6 +2,7 @@
 // 使用 CF_ACCOUNT_ID + CF_API_TOKEN 通过 Cloudflare API 管理桶级别操作
 
 import { verifyAuth } from './_auth.js'
+import { signV4 } from './s3/_sign.js'
 
 const CF_API_BASE = 'https://api.cloudflare.com/client/v4'
 
@@ -41,8 +42,40 @@ export async function onRequestGet(context) {
       })
     }
 
+    const rawBuckets = data.result.buckets || []
+
+    // 并行获取每个桶的对象数量（轻量请求，只取第一页）
+    const accountId = env.CF_ACCOUNT_ID
+    const endpoint = accountId ? `https://${accountId}.r2.cloudflarestorage.com` : null
+
+    const countPromises = rawBuckets.map(async (b) => {
+      if (!endpoint || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
+        return { name: b.name, objectCount: null }
+      }
+      try {
+        const signed = await signV4('GET', b.name, `/${b.name}`, {
+          'list-type': '2', 'max-keys': '1', 'delimiter': '',
+        }, {}, null, env)
+        const res = await fetch(`${endpoint}${signed.requestUrl}`, {
+          method: 'GET', headers: signed.headers,
+        })
+        if (!res.ok) return { name: b.name, objectCount: null }
+        const xml = await res.text()
+        const truncated = xml.includes('<IsTruncated>true</IsTruncated>')
+        // 只有 IsTruncated=true 才说明有对象；如果返回空结果（无 Contents），也是空的
+        const hasObjects = xml.includes('<Contents>')
+        return { name: b.name, objectCount: truncated || hasObjects ? '?' : 0 }
+      } catch {
+        return { name: b.name, objectCount: null }
+      }
+    })
+
+    const counts = await Promise.all(countPromises)
+    const countMap = Object.fromEntries(counts.map(c => [c.name, c.objectCount]))
+    const buckets = rawBuckets.map(b => ({ ...b, objectCount: countMap[b.name] ?? null }))
+
     return new Response(JSON.stringify({
-      buckets: data.result.buckets || [],
+      buckets,
       cursor: data.result_info?.cursor || null,
     }), {
       headers: { 'Content-Type': 'application/json' },

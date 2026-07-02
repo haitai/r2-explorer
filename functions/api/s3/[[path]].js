@@ -3,93 +3,8 @@
 // 需要环境变量: CF_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 
 import { verifyAuth } from '../_auth.js'
-
-// === AWS Signature V4 签名 ===
-// R2 S3 兼容实现要求 canonical URI 做 URI 编码（/ 不编码）
-// 注意: 这与 AWS S3 文档规范不同（AWS S3 不编码 canonical URI），但 R2 的行为是编码
-// - canonicalUri: 原始未编码的路径（传入参数），签名计算时自动编码
-// - canonicalQuerystring: 查询参数必须按 key 排序，key/value 分别 URI 编码
-
-async function signV4(method, bucket, canonicalUri, queryParams, extraHeaders, body, env) {
-  const accessKey = env.R2_ACCESS_KEY_ID
-  const secretKey = env.R2_SECRET_ACCESS_KEY
-  const accountId = env.CF_ACCOUNT_ID
-  const host = `${accountId}.r2.cloudflarestorage.com`
-
-  const service = 's3'
-  const region = 'auto'
-  const now = new Date()
-  const amzDate = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-  const dateStamp = amzDate.slice(0, 8)
-
-  const payloadHash = body ? await sha256Hex(body) : 'UNSIGNED-PAYLOAD'
-
-  // AWS V4 规范: 所有 header name 必须小写
-  const allHeaders = {
-    host,
-    'x-amz-date': amzDate,
-    'x-amz-content-sha256': payloadHash,
-  }
-  // extraHeaders 中的 key 统一转为小写
-  for (const [k, v] of Object.entries(extraHeaders || {})) {
-    allHeaders[k.toLowerCase()] = v
-  }
-
-  // 构建规范查询字符串（参数按 key 字典序排列，key/value 分别 URI 编码）
-  const sortedKeys = Object.keys(queryParams || {}).sort()
-  const canonicalQuerystring = sortedKeys
-    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
-    .join('&')
-
-  const signedHeaderKeys = Object.keys(allHeaders).sort()
-  const signedHeadersStr = signedHeaderKeys.join(';')
-  const canonicalHeaders = signedHeaderKeys
-    .map(k => `${k}:${allHeaders[k]?.toString().trim()}`)
-    .join('\n') + '\n'
-
-  // R2 S3 兼容: canonicalUri 需要 URI 编码（/ 不编码）
-  // 这与 AWS S3 规范不同（AWS S3 不编码），但 R2 的实现要求编码
-  const encodedCanonicalUri = canonicalUri.split('/').map(s => encodeURIComponent(s)).join('/')
-
-  // Canonical Request
-  const canonicalRequest = [
-    method,
-    encodedCanonicalUri,
-    canonicalQuerystring,
-    canonicalHeaders,
-    signedHeadersStr,
-    payloadHash,
-  ].join('\n')
-
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
-  const stringToSign = [
-    'AWS4-HMAC-SHA256',
-    amzDate,
-    credentialScope,
-    await sha256Hex(canonicalRequest),
-  ].join('\n')
-
-  const signingKey = await hmacChain(secretKey, dateStamp, region, service)
-  const signature = await hmacHex(signingKey, stringToSign)
-
-  const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeadersStr}, Signature=${signature}`
-  const requestHeaders = { ...allHeaders, Authorization: authHeader }
-  delete requestHeaders.host // fetch 会自动设置 host
-
-  // 实际请求 URL: 路径部分也用编码后的 canonicalUri
-  const queryString = sortedKeys
-    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
-    .join('&')
-  const requestUrl = queryString ? `${encodedCanonicalUri}?${queryString}` : encodedCanonicalUri
-
-  return { host, headers: requestHeaders, requestUrl }
-}
-
-async function sha256Hex(data) {
-  if (typeof data === 'string') data = new TextEncoder().encode(data)
-  const hash = await crypto.subtle.digest('SHA-256', data)
-  return bufToHex(hash)
-}
+import { signV4 } from './_sign.js'
+import { sha256Hex } from './_sign.js'
 
 async function md5Base64Fn(data) {
   if (typeof data === 'string') data = new TextEncoder().encode(data)
@@ -114,29 +29,6 @@ function parseDeleteResultXml(xml) {
     results.push(!hasError)
   }
   return results
-}
-
-function bufToHex(buf) {
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-async function hmacSha256(key, data) {
-  if (typeof key === 'string') key = new TextEncoder().encode(key)
-  if (typeof data === 'string') data = new TextEncoder().encode(data)
-  const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  return await crypto.subtle.sign('HMAC', cryptoKey, data)
-}
-
-async function hmacHex(key, data) {
-  return bufToHex(await hmacSha256(key, data))
-}
-
-async function hmacChain(secretKey, date, region, service) {
-  let k = await hmacSha256('AWS4' + secretKey, date)
-  k = await hmacSha256(k, region)
-  k = await hmacSha256(k, service)
-  k = await hmacSha256(k, 'aws4_request')
-  return k
 }
 
 // === S3 兼容 API 路由处理 ===
