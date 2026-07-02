@@ -70,9 +70,7 @@
         ref="winContent"
         @contextmenu.prevent="onContentContextMenu"
         @mousedown="onContentMouseDown"
-        @mousemove="onContentMouseMove"
-        @mouseup="onContentMouseUp"
-        @mouseleave="onContentMouseUp">
+        @mouseup="onContentMouseUp">
 
         <!-- 框选矩形 -->
         <div v-if="sel.isSelecting" class="selection-box" :style="selBoxStyle"></div>
@@ -482,18 +480,18 @@ function onContentMouseDown(e) {
   if (e.button !== 0) return
   // 跳过交互元素
   if (e.target.closest('.action-btn, .resize-handle, button, input, select')) return
-
   sel.value.isSelecting = true
-  // 使用 viewport 绝对坐标（selection-box 用 position:fixed）
   sel.value.startX = e.clientX
   sel.value.startY = e.clientY
   sel.value.endX = e.clientX
   sel.value.endY = e.clientY
   // 清除已有选择（框选从空白开始，行为和按住 Ctrl 不同）
   if (!e.ctrlKey && !e.metaKey) clearSelection()
+  // 监听全局 mousemove/mouseup
+  document.addEventListener('mousemove', onDocMouseMove, { passive: true })
+  document.addEventListener('mouseup', onDocMouseUp)
 }
-
-function onContentMouseMove(e) {
+function onDocMouseMove(e) {
   if (!sel.value.isSelecting) return
   sel.value.endX = e.clientX
   sel.value.endY = e.clientY
@@ -520,9 +518,17 @@ function onContentMouseMove(e) {
     selectedItems.value = items.value.filter(i => keys.includes(i.key || i.prefix))
   }
 }
-
-function onContentMouseUp() {
+function onDocMouseUp() {
   sel.value.isSelecting = false
+  document.removeEventListener('mousemove', onDocMouseMove)
+  document.removeEventListener('mouseup', onDocMouseUp)
+}
+function onContentMouseUp() {
+  onDocMouseUp()
+}
+
+function onContentMouseMove(e) {
+  // 由 document 级别的 onDocMouseMove 处理，此处仅用于防止事件冒泡
 }
 
 // 文件项点击（单独处理，区别于框选）
