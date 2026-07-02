@@ -363,7 +363,7 @@
 
 .grid-item {
   width: 90px;
-  height: 100px;
+  height: 120px;
   display: flex;
   flex-direction: column;
   align-items: center;

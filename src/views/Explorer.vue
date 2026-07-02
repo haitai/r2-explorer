@@ -112,14 +112,7 @@
             <span class="col col-date">{{ item.lastModified ? formatDate(item.lastModified) : '' }}</span>
             <span class="col col-type">{{ itemType(item) }}</span>
             <span class="col col-actions">
-              <template v-if="item.prefix === undefined">
-                <button class="action-btn" v-if="isPreviewable(item)" @click.stop="previewItem(item)" title="预览">👁</button>
-                <button class="action-btn" @click.stop="downloadItem(item)" title="下载">⬇</button>
-                <button class="action-btn danger" @click.stop="deleteSingleItem(item)" title="删除">🗑</button>
-              </template>
-              <template v-else>
-                <button class="action-btn danger" @click.stop="deleteSingleItem(item)" title="删除文件夹">🗑</button>
-              </template>
+              <button class="action-btn more" @click.stop="showActionMenu(item, $event)" title="操作">⋯</button>
             </span>
           </div>
         </div>
@@ -133,13 +126,11 @@
             @click="onItemClick(item, $event)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
-            <span class="icon">{{ itemIcon(item) }}</span>
+            <span class="icon">
+              <img v-if="isImage(item)" :src="getThumbUrl(item)" class="grid-thumb" loading="lazy" />
+              <template v-else>{{ itemIcon(item) }}</template>
+            </span>
             <span class="name">{{ item.name }}</span>
-            <div class="grid-actions" v-if="item.prefix === undefined">
-              <button class="action-btn small" v-if="isPreviewable(item)" @click.stop="previewItem(item)" title="预览">👁</button>
-              <button class="action-btn small" @click.stop="downloadItem(item)" title="下载">⬇</button>
-              <button class="action-btn small danger" @click.stop="deleteSingleItem(item)" title="删除">🗑</button>
-            </div>
           </div>
         </div>
       </div>
@@ -151,6 +142,16 @@
       <span>{{ selectedItems.length }} 项已选择</span>
       <span>{{ items.length }} 项</span>
       <span v-if="totalSize > 0">总大小: {{ formatSize(totalSize) }}</span>
+    </div>
+
+    <!-- 详情操作菜单 -->
+    <div v-if="actionMenu.visible" class="action-menu" :style="{ left: actionMenu.x + 'px', top: actionMenu.y + 'px' }" @click.stop>
+      <div v-if="actionMenu.item.prefix !== undefined" class="action-menu-item" @click="openItem(actionMenu.item)">📂 打开</div>
+      <template v-if="actionMenu.item.prefix === undefined">
+        <div v-if="isPreviewable(actionMenu.item)" class="action-menu-item" @click="previewItem(actionMenu.item); hideActionMenu()">👁 预览</div>
+        <div class="action-menu-item" @click="downloadItem(actionMenu.item); hideActionMenu()">⬇ 下载</div>
+      </template>
+      <div class="action-menu-item" @click="deleteSingleItem(actionMenu.item); hideActionMenu()">🗑 删除</div>
     </div>
 
     <!-- 右键菜单 -->
@@ -338,6 +339,7 @@ const moveTarget = ref(null)
 const copyMoveTarget = ref('')
 const deleteTargets = ref([])
 const contextMenu = ref({ visible: false, x: 0, y: 0, target: '', item: null })
+const actionMenu = ref({ visible: false, x: 0, y: 0, item: null })
 
 // === 列宽调整 ===
 const DEFAULT_COL_WIDTHS = { icon: 28, name: 250, size: 80, date: 140, type: 100, actions: 70 }
@@ -646,6 +648,18 @@ function goUp() { if (!canGoUp.value) return; const parts = currentPath.value.sp
 function refresh() { loadDirectory(currentPath.value) }
 function openItem(item) { item.prefix !== undefined ? navigateTo(item.prefix) : (isPreviewable(item) ? previewItem(item) : downloadItem(item)) }
 
+// === 图片缩略图 ===
+function isImage(item) {
+  if (item.prefix !== undefined) return false
+  const ext = (item.name || '').split('.').pop().toLowerCase()
+  return ['jpg','jpeg','png','gif','webp','svg','bmp','ico','avif'].includes(ext)
+}
+function getThumbUrl(item) {
+  // 通过 S3 API 获取，auth token 作为 query param 避免 CORS 问题
+  const base = `/api/s3/${currentBucket.value}/${encodeURIComponent(item.key)}`
+  return r2client.authToken ? `${base}?token=${encodeURIComponent(r2client.authToken)}` : base
+}
+
 // === 预览 vs 下载 ===
 function isPreviewable(item) {
   if (item.prefix !== undefined) return false
@@ -710,7 +724,17 @@ async function confirmDelete() {
 }
 
 // === 右键菜单 ===
-function hideContextMenu() { contextMenu.value.visible = false }
+function hideContextMenu() { contextMenu.value.visible = false; actionMenu.value.visible = false }
+function showActionMenu(item, e) {
+  e.preventDefault()
+  const rect = e.target.getBoundingClientRect()
+  actionMenu.value = { visible: true, x: rect.left, y: rect.bottom + 2, item }
+  setTimeout(() => {
+    const close = () => { actionMenu.value.visible = false; document.removeEventListener('click', close) }
+    document.addEventListener('click', close)
+  }, 0)
+}
+function hideActionMenu() { actionMenu.value.visible = false }
 function onRootContextMenu(e) { contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'root', item:null } }
 function onContentContextMenu(e) { contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'content', item:null } }
 function onItemContextMenu(item, e) { if (!isSelected(item)) selectedItems.value = [item]; contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'item', item } }
@@ -876,11 +900,86 @@ onUnmounted(() => {
 .action-btn:hover { background: #e5e5e5; border-color: var(--win-border); }
 .action-btn.danger { color: var(--win-danger); }
 .action-btn.danger:hover { background: #fde; border-color: #e81123; }
-.action-btn.small { width: 18px; height: 18px; font-size: 10px; }
+.action-btn.more {
+  font-weight: bold;
+  font-size: 14px;
+  width: 26px;
+  height: 24px;
+}
 
-/* 网格视图中的操作按钮 */
-.grid-actions {
-  display: flex; gap: 2px; margin-top: 2px;
+/* 详情操作菜单（省略号弹出） */
+.action-menu {
+  position: fixed;
+  z-index: 10000;
+  background: #fff;
+  border: 1px solid var(--win-border, #d6d6d6);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 4px 0;
+  min-width: 120px;
+}
+.action-menu-item {
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--win-text, #212121);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.action-menu-item:hover { background: #e5f3ff; }
+
+/* 网格视图 */
+.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  align-content: start;
+}
+
+.grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: center;
+  user-select: none;
+}
+
+.grid-item:hover { background: #e5f3ff; }
+.grid-item.selected { background: var(--win-selected); border-color: var(--win-selected-border); }
+
+.grid-item .icon {
+  width: 64px;
+  height: 64px;
+  font-size: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.grid-item .name {
+  font-size: 12px;
+  word-break: break-all;
+  line-height: 1.4;
+  max-height: 2.8em;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* 网格图片缩略图 */
+.grid-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
 }
 
 /* 框选矩形 */
