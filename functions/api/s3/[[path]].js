@@ -304,38 +304,61 @@ export async function onRequest(context) {
     const body = await request.json()
 
     if (body.keys) {
-      // 使用 S3 DeleteObjects API（POST ?delete + XML body）
-      const xmlBody = '<?xml version="1.0" encoding="UTF-8"?><Delete>' +
-        body.keys.map(k => `<Object><Key>${escapeXml(k)}</Key></Object>`).join('') +
-        '</Delete>'
-      const md5Base64 = await md5Base64Fn(xmlBody)
+      const results = []
+      for (const k of body.keys) {
+        if (k.endsWith('/')) {
+          // 文件夹：先递归列出所有对象并删除，再删文件夹本身
+          let contToken = ''
+          let page = 0
+          do {
+            page++
+            const listParams = { 'list-type': '2', 'prefix': k, 'delimiter': '', 'max-keys': '1000' }
+            if (contToken) listParams['continuation-token'] = contToken
+            const listSign = await signV4('GET', bucket, `/${bucket}`, listParams, {}, null, env)
+            const listRes = await fetch(`${endpoint}${listSign.requestUrl}`, {
+              method: 'GET', headers: listSign.headers,
+            })
+            if (!listRes.ok) {
+              console.error('List for delete error:', listRes.status, await listRes.text())
+              results.push({ key: k, deleted: false, error: `list failed: ${listRes.status}` })
+              break
+            }
+            const listXml = await listRes.text()
+            const objKeys = []
+            for (const block of listXml.matchAll(/<Contents>[\s\S]*?<\/Contents>/g)) {
+              const km = block[0].match(/<Key>([^<]+)<\/Key>/)
+              if (km) objKeys.push(km[1])
+            }
+            const contMatch = listXml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)
+            contToken = contMatch ? contMatch[1] : ''
 
-      const canonicalUri = `/${bucket}`
-      const queryParams = { 'delete': '' }
-      const signed = await signV4('POST', bucket, canonicalUri, queryParams, {
-        'content-type': 'application/xml',
-        'content-md5': md5Base64,
-      }, xmlBody, env)
+            for (const objKey of objKeys) {
+              const delUri = `/${bucket}/${objKey}`
+              const delSign = await signV4('DELETE', bucket, delUri, {}, {}, null, env)
+              const delRes = await fetch(`${endpoint}${delSign.requestUrl}`, {
+                method: 'DELETE', headers: delSign.headers,
+              })
+              results.push({ key: objKey, deleted: delRes.ok || delRes.status === 204 })
+            }
+          } while (contToken && page < 100) // 防止无限循环，最多 100 页
 
-      const deleteUrl = `${endpoint}${signed.requestUrl}`
-      const res = await fetch(deleteUrl, {
-        method: 'POST',
-        headers: signed.headers,
-        body: xmlBody,
-      })
-
-      if (!res.ok && res.status !== 200) {
-        const errText = await res.text()
-        console.error('S3 DeleteObjects error:', res.status, errText)
-        return new Response(JSON.stringify({ error: `DeleteObjects failed: ${res.status}`, detail: errText }), {
-          status: res.status,
-          headers: { 'Content-Type': 'application/json' },
-        })
+          // 最后删文件夹 marker 本身
+          const markerUri = `/${bucket}/${k}`
+          const markerSign = await signV4('DELETE', bucket, markerUri, {}, {}, null, env)
+          const markerRes = await fetch(`${endpoint}${markerSign.requestUrl}`, {
+            method: 'DELETE', headers: markerSign.headers,
+          })
+          results.push({ key: k, deleted: markerRes.ok || markerRes.status === 204 })
+        } else {
+          // 普通文件直接删除
+          const canonicalUri = `/${bucket}/${k}`
+          const signed = await signV4('DELETE', bucket, canonicalUri, {}, {}, null, env)
+          const res = await fetch(`${endpoint}${signed.requestUrl}`, {
+            method: 'DELETE', headers: signed.headers,
+          })
+          results.push({ key: k, deleted: res.ok || res.status === 204 })
+        }
       }
-
-      const resText = await res.text()
-      const deleteResults = parseDeleteResultXml(resText)
-      const results = body.keys.map((k, i) => ({ key: k, deleted: deleteResults[i] }))
       return new Response(JSON.stringify({ results }), {
         headers: { 'Content-Type': 'application/json' },
       })
