@@ -66,7 +66,16 @@
       </div>
 
       <!-- 内容区 -->
-      <div class="win-content" @contextmenu.prevent="onContentContextMenu" @click="clearSelection">
+      <div class="win-content"
+        ref="winContent"
+        @contextmenu.prevent="onContentContextMenu"
+        @mousedown="onContentMouseDown"
+        @mousemove="onContentMouseMove"
+        @mouseup="onContentMouseUp"
+        @mouseleave="onContentMouseUp">
+
+        <!-- 框选矩形 -->
+        <div v-if="sel.isSelecting" class="selection-box" :style="selBoxStyle"></div>
         <div v-if="!currentBucket" class="empty-state">
           <span class="icon" style="font-size:64px">🗄️</span>
           <span class="text" style="font-size:16px">请从左侧选择一个存储桶，或创建新存储桶</span>
@@ -92,7 +101,8 @@
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
             class="file-row" :style="detailGridStyle"
             :class="{ selected: isSelected(item), folder: item.prefix !== undefined }"
-            @click.stop="selectItem(item)"
+            :data-item-key="item.key || item.prefix"
+            @mousedown.left.exact="onItemMouseDown(item, $event)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="col col-icon">{{ itemIcon(item) }}</span>
@@ -117,7 +127,8 @@
         <div v-else class="grid-view">
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
             class="grid-item" :class="{ selected: isSelected(item) }"
-            @click.stop="selectItem(item)"
+            :data-item-key="item.key || item.prefix"
+            @mousedown.left.exact="onItemMouseDown(item, $event)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="icon">{{ itemIcon(item) }}</span>
@@ -430,6 +441,118 @@ function selectItem(item) {
   else selectedItems.value.push(item)
 }
 function clearSelection() { selectedItems.value = [] }
+
+// === 框选逻辑 ===
+const winContent = ref(null)
+const sel = ref({ isSelecting: false, startX: 0, startY: 0, endX: 0, endY: 0 })
+
+const selBoxStyle = computed(() => {
+  if (!sel.value.isSelecting) return {}
+  const { startX, startY, endX, endY } = sel.value
+  const left = Math.min(startX, endX)
+  const top = Math.min(startY, endY)
+  const width = Math.abs(endX - startX)
+  const height = Math.abs(endY - startY)
+  if (width < 4 && height < 4) return { display: 'none' }
+  return { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` }
+})
+
+// 获取容器内某点的 item-key
+function getItemKeyAt(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY)
+  if (!el) return null
+  return el.closest('[data-item-key]')?.dataset?.itemKey ?? null
+}
+
+// 计算落在框选矩形内的所有 key
+function getItemKeysInRect(rect) {
+  const keys = []
+  const { left: rLeft, top: rTop, right: rRight, bottom: rBottom } = rect
+  document.querySelectorAll('[data-item-key]').forEach(el => {
+    const itemRect = el.getBoundingClientRect()
+    if (itemRect.left < rRight && itemRect.right > rLeft &&
+        itemRect.top < rBottom && itemRect.bottom > rTop) {
+      keys.push(el.dataset.itemKey)
+    }
+  })
+  return keys
+}
+
+function onContentMouseDown(e) {
+  if (e.button !== 0) return
+  // 跳过交互元素
+  if (e.target.closest('.action-btn, .resize-handle, button, input, select')) return
+
+  sel.value.isSelecting = true
+  // 使用 viewport 绝对坐标（selection-box 用 position:fixed）
+  sel.value.startX = e.clientX
+  sel.value.startY = e.clientY
+  sel.value.endX = e.clientX
+  sel.value.endY = e.clientY
+  // 清除已有选择（框选从空白开始，行为和按住 Ctrl 不同）
+  if (!e.ctrlKey && !e.metaKey) clearSelection()
+}
+
+function onContentMouseMove(e) {
+  if (!sel.value.isSelecting) return
+  sel.value.endX = e.clientX
+  sel.value.endY = e.clientY
+
+  // 计算框选矩形（viewport 坐标）
+  const startX = sel.value.startX
+  const startY = sel.value.startY
+  const endX = sel.value.endX
+  const endY = sel.value.endY
+  const selRect = {
+    left: Math.min(startX, endX),
+    top: Math.min(startY, endY),
+    right: Math.max(startX, endX),
+    bottom: Math.max(startY, endY)
+  }
+
+  const keys = getItemKeysInRect(selRect)
+  if (e.ctrlKey || e.metaKey) {
+    // 合并模式
+    const merged = new Set(selectedItems.value.map(i => i.key || i.prefix))
+    keys.forEach(k => merged.add(k))
+    selectedItems.value = items.value.filter(i => merged.has(i.key || i.prefix))
+  } else {
+    selectedItems.value = items.value.filter(i => keys.includes(i.key || i.prefix))
+  }
+}
+
+function onContentMouseUp() {
+  sel.value.isSelecting = false
+}
+
+// 文件项点击（单独处理，区别于框选）
+function onItemMouseDown(item, e) {
+  if (e.button !== 0) return
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl+点击：切换单个项的选中状态
+    e.preventDefault()
+    selectItem(item)
+    // 阻止后续 click 事件
+    const el = e.currentTarget
+    const handler = () => { selectItem(item); el.removeEventListener('click', handler) }
+    el.addEventListener('click', handler, { once: true })
+  } else {
+    // 普通点击：如果当前未选中，则只选中它（清除其他）
+    if (!isSelected(item)) {
+      selectedItems.value = [item]
+    }
+  }
+}
+
+// === 键盘快捷键 ===
+function onGlobalKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+    e.preventDefault()
+    selectedItems.value = items.value.slice()
+  }
+  if (e.key === 'Escape') clearSelection()
+}
+
 function sortBy(f) { if (justResized.value) return; sortField.value === f ? sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc' : (sortField.value = f, sortOrder.value = 'asc') }
 function sortIndicator(f) { return sortField.value === f ? (sortOrder.value === 'asc' ? '↑' : '↓') : '' }
 function toggleView() { viewMode.value = viewMode.value === 'detail' ? 'grid' : 'detail' }
@@ -609,8 +732,13 @@ function doLogout() {
 
 onMounted(async () => {
   if (!r2client.authToken) { router.push('/login'); return }
+  document.addEventListener('keydown', onGlobalKeydown)
   await loadBuckets()
   if (currentBucket.value) await loadDirectory('')
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onGlobalKeydown)
 })
 </script>
 
@@ -721,5 +849,16 @@ onMounted(async () => {
 /* 网格视图中的操作按钮 */
 .grid-actions {
   display: flex; gap: 2px; margin-top: 2px;
+}
+
+/* 框选矩形 */
+.selection-box {
+  position: absolute;
+  z-index: 9999;
+  background: rgba(64, 145, 247, 0.12);
+  border: 1.5px solid rgba(64, 145, 247, 0.7);
+  border-radius: 2px;
+  pointer-events: none;
+  /* display 由 selBoxStyle 控制 */
 }
 </style>
