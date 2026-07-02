@@ -91,6 +91,31 @@ async function sha256Hex(data) {
   return bufToHex(hash)
 }
 
+async function md5Base64Fn(data) {
+  if (typeof data === 'string') data = new TextEncoder().encode(data)
+  const hash = await crypto.subtle.digest('MD5', data)
+  return bufToBase64(hash)
+}
+
+function bufToBase64(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+}
+
+function escapeXml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function parseDeleteResultXml(xml) {
+  // <DeleteResult> 中每个 <Object> 返回 <Key> 和 <DeleteMarker> / <Error>
+  const results = []
+  for (const obj of xml.matchAll(/<Object>([\s\S]*?)<\/Object>/g)) {
+    const content = obj[1]
+    const hasError = /<Error>/.test(content)
+    results.push(!hasError)
+  }
+  return results
+}
+
 function bufToHex(buf) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -279,15 +304,38 @@ export async function onRequest(context) {
     const body = await request.json()
 
     if (body.keys) {
-      const results = []
-      for (const k of body.keys) {
-        const canonicalUri = `/${bucket}/${k}`
-        const signed = await signV4('DELETE', bucket, canonicalUri, {}, {}, null, env)
-        const res = await fetch(`${endpoint}${signed.requestUrl}`, {
-          method: 'DELETE', headers: signed.headers,
+      // 使用 S3 DeleteObjects API（POST ?delete + XML body）
+      const xmlBody = '<?xml version="1.0" encoding="UTF-8"?><Delete>' +
+        body.keys.map(k => `<Object><Key>${escapeXml(k)}</Key></Object>`).join('') +
+        '</Delete>'
+      const md5Base64 = await md5Base64Fn(xmlBody)
+
+      const canonicalUri = `/${bucket}`
+      const queryParams = { 'delete': '' }
+      const signed = await signV4('POST', bucket, canonicalUri, queryParams, {
+        'content-type': 'application/xml',
+        'content-md5': md5Base64,
+      }, xmlBody, env)
+
+      const deleteUrl = `${endpoint}${signed.requestUrl}`
+      const res = await fetch(deleteUrl, {
+        method: 'POST',
+        headers: signed.headers,
+        body: xmlBody,
+      })
+
+      if (!res.ok && res.status !== 200) {
+        const errText = await res.text()
+        console.error('S3 DeleteObjects error:', res.status, errText)
+        return new Response(JSON.stringify({ error: `DeleteObjects failed: ${res.status}`, detail: errText }), {
+          status: res.status,
+          headers: { 'Content-Type': 'application/json' },
         })
-        results.push({ key: k, deleted: res.ok || res.status === 204 })
       }
+
+      const resText = await res.text()
+      const deleteResults = parseDeleteResultXml(resText)
+      const results = body.keys.map((k, i) => ({ key: k, deleted: deleteResults[i] }))
       return new Response(JSON.stringify({ results }), {
         headers: { 'Content-Type': 'application/json' },
       })
