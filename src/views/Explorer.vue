@@ -780,7 +780,9 @@ async function doCopyMove() {
   const action = showCopyModal.value ? 'copy' : 'move'
   if (!target || !copyMoveBucket.value || !currentBucket.value) return
   const srcKey = target.key || target.prefix
-  let dstKey = copyMoveTarget.value; if (!dstKey.endsWith('/')) dstKey += '/'; dstKey += target.name
+  let dstKey = copyMoveTarget.value
+  if (dstKey !== '' && !dstKey.endsWith('/')) dstKey += '/'
+  dstKey += target.name
 
   try {
     if (copyMoveBucket.value === currentBucket.value) {
