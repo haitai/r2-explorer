@@ -162,8 +162,8 @@
         <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="downloadItem(contextMenu.item)">⬇ 下载</div>
         <div class="context-menu-sep" />
         <div class="context-menu-item" @click="showRenameModal = true; renameTarget = contextMenu.item; renameNewName = contextMenu.item.name">✏️ 重命名</div>
-        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="showCopyModal = true; copyTarget = contextMenu.item; copyMoveBucket = currentBucket; copyMoveTarget = ''">📋 复制到...</div>
-        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="showMoveModal = true; moveTarget = contextMenu.item; copyMoveBucket = currentBucket; copyMoveTarget = ''">📦 移动到...</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="openCopyMove('copy')">📋 复制到...</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="openCopyMove('move')">📦 移动到...</div>
         <div class="context-menu-sep" />
         <div class="context-menu-item danger" @click="deleteSingleItem(contextMenu.item)">🗑️ 删除</div>
       </template>
@@ -236,19 +236,23 @@
     <!-- 复制/移动到 -->
     <div v-if="showCopyModal || showMoveModal" class="modal-overlay" @click.self="showCopyModal=false;showMoveModal=false">
       <div class="modal-box">
-        <div class="modal-header">{{ showCopyModal ? '复制到' : '移动到' }}</div>
+        <div class="modal-header">{{ showCopyModal ? '复制到' : '移动到' }} ({{ copyMoveSources.length }} 项)</div>
         <div class="modal-body">
-          <div style="margin-bottom:8px;font-size:12px;color:var(--win-text-secondary)">
-            {{ showCopyModal ? copyTarget?.name : moveTarget?.name }}
+          <div style="margin-bottom:8px;max-height:80px;overflow-y:auto;font-size:12px;color:var(--win-text-secondary)">
+            <div v-for="s in copyMoveSources" :key="s.key||s.prefix" style="padding:1px 0">{{ itemIcon(s) }} {{ s.name }}</div>
           </div>
           <select v-model="copyMoveBucket" class="modal-input" style="margin-bottom:8px">
             <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}</option>
           </select>
-          <input v-model="copyMoveTarget" class="modal-input" placeholder="目标路径（如 folder/subfolder/）" />
+          <input v-model="copyMoveTarget" class="modal-input" placeholder="目标路径（如 folder/subfolder/）" :disabled="copyMoving" />
+        </div>
+        <div v-if="copyMoving" style="padding:0 20px 12px">
+          <div style="font-size:12px;color:var(--win-text-secondary);margin-bottom:4px">{{ copyMoveProgress }}</div>
+          <div class="progress-bar"><div class="fill" :style="{ width: copyMovePercent + '%' }" /></div>
         </div>
         <div class="modal-footer">
-          <button class="modal-btn" @click="showCopyModal=false;showMoveModal=false">取消</button>
-          <button class="modal-btn primary" @click="doCopyMove">{{ showCopyModal ? '复制' : '移动' }}</button>
+          <button class="modal-btn" @click="showCopyModal=false;showMoveModal=false" :disabled="copyMoving">取消</button>
+          <button class="modal-btn primary" @click="doCopyMove" :disabled="copyMoving">{{ copyMoving ? '操作中...' : (showCopyModal ? '复制' : '移动') }}</button>
         </div>
       </div>
     </div>
@@ -342,9 +346,12 @@ const renameTarget = ref(null)
 const renameNewName = ref('')
 const copyTarget = ref(null)
 const moveTarget = ref(null)
+const copyMoveSources = ref([])
 const copyMoveTarget = ref('')
 const copyMoveBucket = ref('')
+const copyMoving = ref(false)
 const copyMoveProgress = ref('')
+const copyMovePercent = ref(0)
 const deleteTargets = ref([])
 const contextMenu = ref({ visible: false, x: 0, y: 0, target: '', item: null })
 const actionMenu = ref({ visible: false, right: 0, y: 0, item: null })
@@ -747,7 +754,66 @@ function onRootContextMenu(e) { contextMenu.value = { visible:true, x:e.clientX,
 function onContentContextMenu(e) { contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'content', item:null } }
 function onItemContextMenu(item, e) { if (!isSelected(item)) selectedItems.value = [item]; contextMenu.value = { visible:true, x:e.clientX, y:e.clientY, target:'item', item } }
 
-// === 其他操作 ===
+// 打开复制/移动弹窗：取已选中的文件（非文件夹）作为操作源
+function openCopyMove(mode) {
+  const targets = selectedItems.value.filter(i => i.prefix === undefined)
+  if (!targets.length) return
+  // 如果右键菜单指向的文件在已选中里就用已选中的，否则单文件
+  copyMoveSources.value = targets
+  copyMoveBucket.value = currentBucket.value
+  copyMoveTarget.value = ''
+  copyMovePercent.value = 0
+  copyMoveProgress.value = ''
+  copyMoving.value = false
+  if (mode === 'copy') showCopyModal.value = true
+  else showMoveModal.value = true
+}
+
+async function doCopyMove() {
+  const sources = copyMoveSources.value
+  const isCopy = showCopyModal.value
+  const dstBucket = copyMoveBucket.value || currentBucket.value
+  const dstBase = copyMoveTarget.value || ''
+  if (!sources.length || !currentBucket.value || !dstBucket) return
+
+  copyMoving.value = true
+  const total = sources.length
+  let done = 0; let failed = 0
+  for (const item of sources) {
+    const srcKey = item.key
+    let dstKey = dstBase
+    if (dstKey !== '' && !dstKey.endsWith('/')) dstKey += '/'
+    dstKey += item.name
+    copyMoveProgress.value = `(${done + 1}/${total}) ${item.name}`
+
+    try {
+      if (dstBucket === currentBucket.value) {
+        // 同桶
+        isCopy ? await r2client.copyObject(currentBucket.value, srcKey, dstKey) : await r2client.moveObject(currentBucket.value, srcKey, dstKey)
+      } else {
+        // 跨桶
+        await r2client.crossBucketCopy(currentBucket.value, srcKey, dstBucket, dstKey)
+        if (!isCopy) await r2client.deleteObject(currentBucket.value, srcKey)
+      }
+    } catch(e) {
+      console.error(`Failed ${isCopy ? 'copy' : 'move'}: ${item.name}`, e)
+      failed++
+    }
+    done++
+    copyMovePercent.value = Math.round((done / total) * 100)
+  }
+
+  if (failed > 0) {
+    copyMoveProgress.value = `完成，${failed} 项失败`
+    setTimeout(() => { copyMoveProgress.value = '' }, 3000)
+  }
+
+  copyMoving.value = false
+  showCopyModal.value = false; showMoveModal.value = false
+  copyMoveTarget.value = ''; copyMoveBucket.value = ''
+  copyMovePercent.value = 0
+  refresh()
+}
 async function doUpload() {
   if (!uploadFiles.value.length || !currentBucket.value) return
   uploading.value = true; uploadProgress.value = 0
@@ -774,36 +840,6 @@ async function doRename() {
   const parts = oldKey.split('/'); parts[parts.length - (oldKey.endsWith('/') ? 2 : 1)] = renameNewName.value
   try { await r2client.renameObject(currentBucket.value, oldKey, parts.join('/')) } catch(e) { console.error(e) }
   showRenameModal.value = false; renameNewName.value = ''; refresh()
-}
-async function doCopyMove() {
-  const target = showCopyModal.value ? copyTarget.value : moveTarget.value
-  const action = showCopyModal.value ? 'copy' : 'move'
-  if (!target || !copyMoveBucket.value || !currentBucket.value) return
-  const srcKey = target.key || target.prefix
-  let dstKey = copyMoveTarget.value
-  if (dstKey !== '' && !dstKey.endsWith('/')) dstKey += '/'
-  dstKey += target.name
-
-  try {
-    if (copyMoveBucket.value === currentBucket.value) {
-      // 同桶：直接 S3 CopyObject
-      action === 'copy' ? await r2client.copyObject(currentBucket.value, srcKey, dstKey) : await r2client.moveObject(currentBucket.value, srcKey, dstKey)
-    } else {
-      // 跨桶：客户端中转流式复制
-      copyMoveProgress.value = '正在传输...'
-      await r2client.crossBucketCopy(currentBucket.value, srcKey, copyMoveBucket.value, dstKey)
-      copyMoveProgress.value = ''
-      if (action === 'move') {
-        await r2client.deleteObject(currentBucket.value, srcKey)
-      }
-    }
-  } catch(e) {
-    console.error(e)
-    copyMoveProgress.value = ''
-  }
-  showCopyModal.value = false; showMoveModal.value = false
-  copyMoveTarget.value = ''; copyMoveBucket.value = ''
-  refresh()
 }
 
 // === 初始化 ===
