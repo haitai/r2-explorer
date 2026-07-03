@@ -152,6 +152,29 @@ class R2Client {
     return this.deleteObject(bucket, srcKey)
   }
 
+  // 上传对象（原始响应，不 parse JSON）
+  async putObjectRaw(bucket, key, blob, contentType) {
+    const res = await this._request(`/s3/${bucket}/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': contentType },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`上传失败: ${res.status} ${text}`)
+    }
+    return res
+  }
+
+  // 跨桶复制：客户端中转 GET 源桶 → PUT 目标桶
+  async crossBucketCopy(srcBucket, srcKey, dstBucket, dstKey) {
+    const res = await this.getObject(srcBucket, srcKey)
+    if (!res.ok) throw new Error(`读取源文件失败: ${res.status}`)
+    const blob = await res.blob()
+    const contentType = res.headers.get('Content-Type') || 'application/octet-stream'
+    return this.putObjectRaw(dstBucket, dstKey, blob, contentType)
+  }
+
   // 重命名
   async renameObject(bucket, oldKey, newKey) {
     return this.moveObject(bucket, oldKey, newKey)
