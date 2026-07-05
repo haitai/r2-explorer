@@ -100,7 +100,7 @@
           </div>
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
             class="file-row" :style="detailGridStyle"
-            :class="{ selected: isSelected(item), folder: item.prefix !== undefined }"
+            :class="{ selected: isSelected(item), folder: item.prefix !== undefined, 'is-cut': isCutItem(item) }"
             :data-item-key="item.key || item.prefix"
             @mousedown.left.exact="onItemMouseDown(item, $event)"
             @click="onItemClick(item, $event)"
@@ -120,7 +120,7 @@
         <!-- 网格视图 -->
         <div v-else class="grid-view">
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
-            class="grid-item" :class="{ selected: isSelected(item) }"
+            class="grid-item" :class="{ selected: isSelected(item), 'is-cut': isCutItem(item) }"
             :data-item-key="item.key || item.prefix"
             @mousedown.left.exact="onItemMouseDown(item, $event)"
             @click="onItemClick(item, $event)"
@@ -142,6 +142,10 @@
       <span>{{ selectedItems.length }} 项已选择</span>
       <span>{{ items.length }} 项</span>
       <span v-if="totalSize > 0">总大小: {{ formatSize(totalSize) }}</span>
+      <span v-if="clipboard.items.length" style="color: var(--win-accent); margin-left: auto">
+        📋 {{ clipboard.mode === 'cut' ? '剪切' : '复制' }}: {{ clipboard.items.length }} 项 @ {{ clipboard.sourceBucket }}
+      </span>
+      <span v-if="pasteStatus" style="color: var(--win-accent); margin-left: auto">{{ pasteStatus }}</span>
     </div>
 
     <!-- 详情操作菜单 -->
@@ -356,6 +360,11 @@ const deleteTargets = ref([])
 const contextMenu = ref({ visible: false, x: 0, y: 0, target: '', item: null })
 const actionMenu = ref({ visible: false, right: 0, y: 0, item: null })
 
+// === 内部剪贴板 ===
+// { mode: 'copy'|'cut', items: [...], sourceBucket: 'xxx' }
+const clipboard = ref({ mode: '', items: [], sourceBucket: '' })
+const pasteStatus = ref('')  // 粘贴操作时的状态文案
+
 // === 列宽调整 ===
 const DEFAULT_COL_WIDTHS = { icon: 28, name: 250, size: 80, date: 140, type: 100, actions: 70 }
 const colWidths = ref({ ...DEFAULT_COL_WIDTHS })
@@ -453,6 +462,10 @@ function itemType(item) {
   return m[ext] || (ext ? ext.toUpperCase() + ' 文件' : '文件')
 }
 function isSelected(item) { return selectedItems.value.some(s => (s.key||s.prefix) === (item.key||item.prefix)) }
+function isCutItem(item) {
+  if (clipboard.value.mode !== 'cut') return false
+  return clipboard.value.items.some(s => (s.key||s.prefix) === (item.key||item.prefix))
+}
 function selectItem(item) {
   const key = item.key || item.prefix
   const idx = selectedItems.value.findIndex(s => (s.key||s.prefix) === key)
@@ -594,12 +607,124 @@ function onItemMouseDown(item, e) {
 }
 
 // === 键盘快捷键 ===
+function isInputFocused() {
+  const el = document.activeElement
+  if (!el) return false
+  const tag = el.tagName.toLowerCase()
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable
+}
+
 function onGlobalKeydown(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+  // Ctrl+A 保持原有逻辑
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+    if (isInputFocused()) return
     e.preventDefault()
     selectedItems.value = items.value.slice()
+    return
   }
-  if (e.key === 'Escape') clearSelection()
+  if (e.key === 'Escape') { clearSelection(); return }
+
+  // 输入框聚焦时不拦截复制/剪切/粘贴/删除
+  if (isInputFocused()) return
+
+  // Ctrl+C 复制
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    if (!selectedItems.value.length) return
+    e.preventDefault()
+    clipboard.value = {
+      mode: 'copy',
+      items: selectedItems.value.filter(i => i.prefix === undefined),
+      sourceBucket: currentBucket.value
+    }
+    return
+  }
+  // Ctrl+X 剪切
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
+    if (!selectedItems.value.length) return
+    e.preventDefault()
+    clipboard.value = {
+      mode: 'cut',
+      items: selectedItems.value.filter(i => i.prefix === undefined),
+      sourceBucket: currentBucket.value
+    }
+    return
+  }
+  // Ctrl+V 粘贴（内部剪贴板优先）
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+    if (!clipboard.value.items.length) return  // 没有内部剪贴板内容，交给 paste 事件处理上传
+    e.preventDefault()
+    doPaste()
+    return
+  }
+  // Delete 删除
+  if (e.key === 'Delete') {
+    if (!selectedItems.value.length) return
+    e.preventDefault()
+    deleteSelectedItems()
+    return
+  }
+}
+
+// 监听 paste 事件：若剪贴板里有本地文件，则走上传流程
+function onGlobalPaste(e) {
+  const files = e.clipboardData?.files
+  if (!files || !files.length) return
+  // 只在有当前桶时才拦截上传
+  if (!currentBucket.value) return
+  e.preventDefault()
+  uploadFiles.value = Array.from(files)
+  doUpload()
+}
+
+// 执行粘贴：基于 clipboard 和当前路径进行复制/移动
+async function doPaste() {
+  const { mode, items: srcs, sourceBucket } = clipboard.value
+  if (!srcs.length || !sourceBucket || !currentBucket.value) return
+
+  const dstBucket = currentBucket.value
+  const dstBase = currentPath.value
+  const isCut = mode === 'cut'
+  const sameBucket = dstBucket === sourceBucket
+  const total = srcs.length
+  let done = 0; let failed = 0
+  pasteStatus.value = `正在粘贴 0/${total}...`
+
+  for (const item of srcs) {
+    const srcKey = item.key
+    let dstKey = dstBase
+    if (dstKey !== '' && !dstKey.endsWith('/')) dstKey += '/'
+    dstKey += item.name
+    pasteStatus.value = `正在粘贴 (${done + 1}/${total}) ${item.name}`
+
+    try {
+      if (sameBucket) {
+        // 同桶：跳过源=目标的情形
+        if (srcKey === dstKey) { done++; continue }
+        isCut ? await r2client.moveObject(sourceBucket, srcKey, dstKey) : await r2client.copyObject(sourceBucket, srcKey, dstKey)
+      } else {
+        // 跨桶
+        await r2client.crossBucketCopy(sourceBucket, srcKey, dstBucket, dstKey)
+        if (isCut) await r2client.deleteObject(sourceBucket, srcKey)
+      }
+    } catch(e) {
+      console.error(`Paste failed: ${item.name}`, e)
+      failed++
+    }
+    done++
+  }
+
+  // 剪切模式粘贴完成后清空剪贴板
+  if (isCut) {
+    clipboard.value = { mode: '', items: [], sourceBucket: '' }
+  }
+
+  if (failed > 0) {
+    pasteStatus.value = `完成，${failed} 项失败`
+    setTimeout(() => { pasteStatus.value = '' }, 3000)
+  } else {
+    pasteStatus.value = ''
+  }
+  refresh()
 }
 
 function sortBy(f) { if (justResized.value) return; sortField.value === f ? sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc' : (sortField.value = f, sortOrder.value = 'asc') }
@@ -852,12 +977,14 @@ function doLogout() {
 onMounted(async () => {
   if (!r2client.authToken) { router.push('/login'); return }
   document.addEventListener('keydown', onGlobalKeydown)
+  window.addEventListener('paste', onGlobalPaste)
   await loadBuckets()
   if (currentBucket.value) await loadDirectory('')
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
+  window.removeEventListener('paste', onGlobalPaste)
 })
 </script>
 
@@ -946,6 +1073,8 @@ onUnmounted(() => {
 
 .file-row:hover { background: #e5f3ff; }
 .file-row.selected { background: var(--win-selected); border-color: var(--win-selected-border); }
+.file-row.is-cut { opacity: 0.5; }
+.file-row.is-cut.selected { background: #fff4e5; border-color: #f0a040; }
 
 .file-row .col-icon { font-size: 16px; text-align: center; padding: 2px 0; }
 .file-row .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; }
@@ -1015,6 +1144,7 @@ onUnmounted(() => {
 
 .grid-item:hover { background: #e5f3ff; }
 .grid-item.selected { background: var(--win-selected); border-color: var(--win-selected-border); }
+.grid-item.is-cut { opacity: 0.5; }
 
 .grid-item .icon {
   width: 64px;
