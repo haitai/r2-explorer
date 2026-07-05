@@ -142,9 +142,6 @@
       <span>{{ selectedItems.length }} 项已选择</span>
       <span>{{ items.length }} 项</span>
       <span v-if="totalSize > 0">总大小: {{ formatSize(totalSize) }}</span>
-      <span v-if="clipboard.items.length" style="color: var(--win-accent); margin-left: auto">
-        📋 {{ clipboard.mode === 'cut' ? '剪切' : '复制' }}: {{ clipboard.items.length }} 项 @ {{ clipboard.sourceBucket }}
-      </span>
       <span v-if="pasteStatus" style="color: var(--win-accent); margin-left: auto">{{ pasteStatus }}</span>
     </div>
 
@@ -713,20 +710,18 @@ async function doPaste() {
     done++
   }
 
-  // 粘贴完成后清空剪贴板（无论复制还是剪切，保持状态栏干净）
-  clipboard.value = { mode: '', items: [], sourceBucket: '' }
+  // 粘贴完成后保留剪贴板内容（复制模式可多次粘贴），剪切模式则清空
+  if (isCut) {
+    clipboard.value = { mode: '', items: [], sourceBucket: '' }
+  }
 
   if (failed > 0) {
     pasteStatus.value = `完成，${failed} 项失败`
     setTimeout(() => { pasteStatus.value = '' }, 3000)
   } else {
-    // 复制模式粘贴成功后给个短暂提示
-    if (!isCut) {
-      pasteStatus.value = `已粘贴 ${total} 项`
-      setTimeout(() => { pasteStatus.value = '' }, 2000)
-    } else {
-      pasteStatus.value = ''
-    }
+    // 短暂提示后清状态栏，但剪贴板内容保留
+    pasteStatus.value = `已粘贴 ${total} 项`
+    setTimeout(() => { pasteStatus.value = '' }, 2000)
   }
   refresh()
 }
