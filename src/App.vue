@@ -125,6 +125,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .sidebar-resizer {
@@ -239,6 +240,9 @@
   font-size: 13px;
   border-radius: 3px;
   margin: 1px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tree-node:hover {
@@ -470,3 +474,4 @@
   to { transform: rotate(360deg); }
 }
 </style>
+

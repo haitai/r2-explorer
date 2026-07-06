@@ -37,6 +37,7 @@
           <div v-for="b in buckets" :key="b.name"
             class="tree-node"
             :class="{ active: currentBucket === b.name }"
+            :title="b.name"
             @click="switchBucket(b.name)">
             <span class="icon"><Icon name="bucket" :size="16" /></span>
             <span>{{ b.name }}</span>
@@ -49,7 +50,7 @@
 
         <div v-if="currentBucket" class="sidebar-section">
           <div class="sidebar-title">目录树</div>
-          <div class="tree-node" @click="navigateTo('')" :class="{ active: currentPath === '' }">
+          <div class="tree-node" @click="navigateTo('')" :class="{ active: currentPath === '' }" title="根目录">
             <span class="icon"><Icon name="home" :size="16" /></span> 根目录
           </div>
           <tree-node
