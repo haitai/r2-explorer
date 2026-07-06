@@ -1041,7 +1041,7 @@ onUnmounted(() => {
 .titlebar-btn.logout:hover { background:#fde; color:var(--win-danger); }
 .sidebar-section { padding:4px 0; }
 .sidebar-title { padding:6px 12px 4px; font-size:11px; color:var(--win-text-secondary); font-weight:600; }
-.bucket-select { height:28px; border:1px solid var(--win-border); border-radius:3px; background:#fff; font-size:13px; padding:0 8px; min-width:140px; }
+.bucket-select { height:32px; border:1px solid var(--win-border); border-radius:3px; background:#fff; font-size:13px; padding:0 8px; min-width:140px; }
 .bucket-info { font-size:10px; color:var(--win-text-secondary); margin-left:4px; }
 .add-bucket { color:var(--win-accent); }
 .upload-area { text-align:center; padding:16px; border:2px dashed var(--win-border); border-radius:8px; }

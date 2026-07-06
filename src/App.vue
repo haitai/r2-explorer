@@ -13,6 +13,7 @@
   --win-border: #d5d5d5;
   --win-sidebar: #e8e8e8;
   --win-sidebar-hover: #cde8ff;
+  --win-sidebar-selected: #ccc;
   --win-selected: #cce8ff;
   --win-selected-border: #99d1ff;
   --win-toolbar-bg: #fafafa;
@@ -47,7 +48,7 @@
 }
 
 .win-toolbar {
-  height: 40px;
+  height: 48px;
   background: var(--win-toolbar-bg);
   border-bottom: 1px solid var(--win-border);
   display: flex;
@@ -92,7 +93,7 @@
 }
 
 .win-addressbar {
-  height: 28px;
+  height: 32px;
   background: #fff;
   border: 1px solid var(--win-border);
   border-radius: 3px;
@@ -230,7 +231,7 @@
 
 /* 侧栏树节点 */
 .tree-node {
-  padding: 3px 8px;
+  padding: 6px 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -245,7 +246,7 @@
 }
 
 .tree-node.active {
-  background: var(--win-selected);
+  background: var(--win-sidebar-selected);
   font-weight: 500;
 }
 
