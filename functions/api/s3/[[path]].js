@@ -52,8 +52,9 @@ export async function onRequest(context) {
   // 所以 pathname 中 key 部分已经是解码后的原始路径
   const pathParts = url.pathname.replace('/api/s3/', '').split('/')
   const bucket = pathParts[0]
-  // Pages Function [[path]] 路由已自动解码 URL，不需要再 decodeURIComponent
-  const key = pathParts.slice(1).join('/') || ''
+  // url.pathname 中 %XX 编码未被自动解码，需要手动 decode 得到原始 key
+  const rawKey = pathParts.slice(1).join('/') || ''
+  const key = rawKey ? decodeURIComponent(rawKey) : ''
 
   if (!bucket) {
     return new Response(JSON.stringify({ error: 'Bucket name required' }), {
@@ -340,3 +341,5 @@ function parseListXml(xml, requestPrefix = '') {
 
   return result
 }
+
+
