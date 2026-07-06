@@ -2,9 +2,9 @@
   <div>
     <div class="tree-node" :class="{ active: currentPath === folder.prefix }" @click="$emit('navigate', folder.prefix)">
       <span class="expand-icon" @click.stop="$emit('toggle-expand', folder.prefix)">
-        {{ isExpanded ? '▼' : '▶' }}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path :d="isExpanded ? 'M2 3.5L5 6.5 8 3.5' : 'M3.5 2L6.5 5 3.5 8'" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </span>
-      <span class="icon">📁</span>
+      <span class="icon"><Icon name="folder" :size="16" /></span>
       <span>{{ folder.name }}</span>
     </div>
     <div v-if="isExpanded && subFolders.length" class="tree-children">
@@ -25,6 +25,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import r2client from '../api/r2client.js'
+import Icon from './Icon.vue'
 
 const props = defineProps({
   folder: Object,

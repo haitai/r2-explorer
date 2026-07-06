@@ -70,6 +70,10 @@
   transition: all 0.15s;
 }
 
+.win-toolbar-btn.icon-only {
+  padding: 4px 8px;
+}
+
 .win-toolbar-btn:hover {
   background: #e5e5e5;
   border-color: var(--win-border);
@@ -265,6 +269,15 @@
 
 .context-menu-item {
   padding: 6px 24px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-menu-item {
+  padding: 6px 16px;
   font-size: 12px;
   cursor: pointer;
   display: flex;

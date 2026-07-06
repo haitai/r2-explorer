@@ -2,19 +2,19 @@
   <div class="explorer-root" @click="hideContextMenu" @contextmenu.prevent="onRootContextMenu">
     <!-- 标题栏 -->
     <div class="win-titlebar">
-      <span class="titlebar-icon">🗄️</span>
+      <span class="titlebar-icon"><Icon name="bucket" :size="16" /></span>
       <span class="titlebar-text">{{ currentBucket || 'R2 Explorer' }} — {{ currentPathDisplay }}</span>
       <div class="titlebar-actions">
-        <button class="titlebar-btn logout" @click="doLogout" title="退出登录">🔒 退出</button>
+        <button class="titlebar-btn logout" @click="doLogout" title="退出登录"><Icon name="logout" :size="14" /> 退出</button>
       </div>
     </div>
 
     <!-- 工具栏 -->
     <div class="win-toolbar">
-      <button class="win-toolbar-btn" @click="goBack" :disabled="!canGoBack">⬅</button>
-      <button class="win-toolbar-btn" @click="goForward" :disabled="!canGoForward">➡</button>
-      <button class="win-toolbar-btn" @click="goUp" :disabled="!canGoUp">⬆</button>
-      <button class="win-toolbar-btn" @click="refresh">🔄</button>
+      <button class="win-toolbar-btn icon-only" @click="goBack" :disabled="!canGoBack" title="后退"><Icon name="back" :size="16" /></button>
+      <button class="win-toolbar-btn icon-only" @click="goForward" :disabled="!canGoForward" title="前进"><Icon name="forward" :size="16" /></button>
+      <button class="win-toolbar-btn icon-only" @click="goUp" :disabled="!canGoUp" title="上一级"><Icon name="up" :size="16" /></button>
+      <button class="win-toolbar-btn icon-only" @click="refresh" title="刷新"><Icon name="refresh" :size="16" /></button>
       <select class="bucket-select" v-model="currentBucket" @change="onBucketChange">
         <option value="" disabled>选择存储桶...</option>
         <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}</option>
@@ -22,10 +22,10 @@
       <div class="win-addressbar">
         <input v-model="addressInput" @keydown.enter="navigateTo(addressInput)" placeholder="输入路径..." />
       </div>
-      <button class="win-toolbar-btn primary" @click="showUploadModal = true" :disabled="!currentBucket">⬆ 上传</button>
-      <button class="win-toolbar-btn" @click="showNewFolderModal = true" :disabled="!currentBucket">📁 新建</button>
-      <button class="win-toolbar-btn danger" @click="deleteSelectedItems" :disabled="!selectedItems.length || !currentBucket">🗑 删除</button>
-      <button class="win-toolbar-btn" @click="toggleView">{{ viewMode === 'detail' ? '🔲 网格' : '📋 详情' }}</button>
+      <button class="win-toolbar-btn primary" @click="showUploadModal = true" :disabled="!currentBucket"><Icon name="upload" :size="14" /> 上传</button>
+      <button class="win-toolbar-btn" @click="showNewFolderModal = true" :disabled="!currentBucket"><Icon name="new-folder" :size="14" /> 新建</button>
+      <button class="win-toolbar-btn danger" @click="deleteSelectedItems" :disabled="!selectedItems.length || !currentBucket"><Icon name="delete" :size="14" /> 删除</button>
+      <button class="win-toolbar-btn" @click="toggleView"><Icon :name="viewMode === 'detail' ? 'grid-view' : 'detail-view'" :size="14" /> {{ viewMode === 'detail' ? '网格' : '详情' }}</button>
     </div>
 
     <!-- 主体 -->
@@ -38,19 +38,19 @@
             class="tree-node"
             :class="{ active: currentBucket === b.name }"
             @click="switchBucket(b.name)">
-            <span class="icon">🗄️</span>
+            <span class="icon"><Icon name="bucket" :size="16" /></span>
             <span>{{ b.name }}</span>
             <span class="bucket-info">{{ b.location }}</span>
           </div>
           <div class="tree-node add-bucket" @click="showCreateBucketModal = true">
-            <span class="icon">➕</span> <span>新建存储桶</span>
+            <span class="icon"><Icon name="new-bucket" :size="16" /></span> <span>新建存储桶</span>
           </div>
         </div>
 
         <div v-if="currentBucket" class="sidebar-section">
           <div class="sidebar-title">目录树</div>
           <div class="tree-node" @click="navigateTo('')" :class="{ active: currentPath === '' }">
-            <span class="icon">🏠</span> 根目录
+            <span class="icon"><Icon name="home" :size="16" /></span> 根目录
           </div>
           <tree-node
             v-for="folder in rootFolders"
@@ -82,14 +82,14 @@
         <!-- 框选矩形（用于网格视图） -->
         <div v-if="sel.isSelecting && viewMode === 'grid'" class="selection-box" :style="selBoxStyle"></div>
         <div v-if="!currentBucket" class="empty-state">
-          <span class="icon" style="font-size:64px">🗄️</span>
+          <span class="icon" style="font-size:64px"><Icon name="bucket" :size="64" /></span>
           <span class="text" style="font-size:16px">请从左侧选择一个存储桶，或创建新存储桶</span>
         </div>
 
         <div v-else-if="loading" class="loading">加载中...</div>
 
         <div v-else-if="items.length === 0" class="empty-state">
-          <span class="icon">📂</span>
+          <span class="icon"><Icon name="folder-open" :size="48" /></span>
           <span class="text">此文件夹为空</span>
         </div>
 
@@ -113,13 +113,13 @@
             @click="onItemClick(item, $event)"
             @dblclick="openItem(item)"
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
-            <span class="col col-icon">{{ itemIcon(item) }}</span>
+            <span class="col col-icon"><Icon :name="itemIconName(item)" :size="16" /></span>
             <span class="col col-name">{{ item.name }}</span>
             <span class="col col-size">{{ item.size ? formatSize(item.size) : '' }}</span>
             <span class="col col-date">{{ item.lastModified ? formatDate(item.lastModified) : '' }}</span>
             <span class="col col-type">{{ itemType(item) }}</span>
             <span class="col col-actions">
-              <button class="action-btn more" @click.stop="showActionMenu(item, $event)" title="操作">⋯</button>
+              <button class="action-btn more" @click.stop="showActionMenu(item, $event)" title="操作"><Icon name="more-h" :size="14" /></button>
             </span>
           </div>
         </div>
@@ -135,7 +135,7 @@
             @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
             <span class="icon">
               <img v-if="isImage(item)" :src="getThumbUrl(item)" class="grid-thumb" loading="lazy" />
-              <template v-else>{{ itemIcon(item) }}</template>
+              <Icon v-else :name="itemIconName(item)" :size="36" />
             </span>
             <span class="name">{{ item.name }}</span>
           </div>
@@ -154,32 +154,32 @@
 
     <!-- 详情操作菜单 -->
     <div v-if="actionMenu.visible" class="action-menu" :style="{ right: actionMenu.right + 'px', top: actionMenu.y + 'px' }" @click.stop>
-      <div v-if="actionMenu.item.prefix !== undefined" class="action-menu-item" @click="openItem(actionMenu.item)">📂 打开</div>
+      <div v-if="actionMenu.item.prefix !== undefined" class="action-menu-item" @click="openItem(actionMenu.item)"><Icon name="folder-open" :size="14" /> 打开</div>
       <template v-if="actionMenu.item.prefix === undefined">
-        <div v-if="isPreviewable(actionMenu.item)" class="action-menu-item" @click="previewItem(actionMenu.item); hideActionMenu()">👁 预览</div>
-        <div class="action-menu-item" @click="downloadItem(actionMenu.item); hideActionMenu()">⬇ 下载</div>
+        <div v-if="isPreviewable(actionMenu.item)" class="action-menu-item" @click="previewItem(actionMenu.item); hideActionMenu()"><Icon name="preview" :size="14" /> 预览</div>
+        <div class="action-menu-item" @click="downloadItem(actionMenu.item); hideActionMenu()"><Icon name="download" :size="14" /> 下载</div>
       </template>
-      <div class="action-menu-item" @click="deleteSingleItem(actionMenu.item); hideActionMenu()">🗑 删除</div>
+      <div class="action-menu-item" @click="deleteSingleItem(actionMenu.item); hideActionMenu()"><Icon name="delete" :size="14" /> 删除</div>
     </div>
 
     <!-- 右键菜单 -->
     <div v-if="contextMenu.visible" class="context-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
       <template v-if="contextMenu.target === 'item'">
-        <div v-if="contextMenu.item.prefix !== undefined" class="context-menu-item" @click="openItem(contextMenu.item)">📂 打开文件夹</div>
-        <div v-if="contextMenu.item.prefix === undefined && isPreviewable(contextMenu.item)" class="context-menu-item" @click="previewItem(contextMenu.item)">👁 预览</div>
-        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="downloadItem(contextMenu.item)">⬇ 下载</div>
+        <div v-if="contextMenu.item.prefix !== undefined" class="context-menu-item" @click="openItem(contextMenu.item)"><Icon name="folder-open" :size="14" /> 打开文件夹</div>
+        <div v-if="contextMenu.item.prefix === undefined && isPreviewable(contextMenu.item)" class="context-menu-item" @click="previewItem(contextMenu.item)"><Icon name="preview" :size="14" /> 预览</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="downloadItem(contextMenu.item)"><Icon name="download" :size="14" /> 下载</div>
         <div class="context-menu-sep" />
-        <div class="context-menu-item" @click="showRenameModal = true; renameTarget = contextMenu.item; renameNewName = contextMenu.item.name">✏️ 重命名</div>
-        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="openCopyMove('copy')">📋 复制到...</div>
-        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="openCopyMove('move')">📦 移动到...</div>
+        <div class="context-menu-item" @click="showRenameModal = true; renameTarget = contextMenu.item; renameNewName = contextMenu.item.name"><Icon name="rename" :size="14" /> 重命名</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="openCopyMove('copy')"><Icon name="copy" :size="14" /> 复制到...</div>
+        <div v-if="contextMenu.item.prefix === undefined" class="context-menu-item" @click="openCopyMove('move')"><Icon name="move" :size="14" /> 移动到...</div>
         <div class="context-menu-sep" />
-        <div class="context-menu-item danger" @click="deleteSingleItem(contextMenu.item)">🗑️ 删除</div>
+        <div class="context-menu-item danger" @click="deleteSingleItem(contextMenu.item)"><Icon name="delete" :size="14" /> 删除</div>
       </template>
       <template v-if="contextMenu.target === 'content'">
-        <div class="context-menu-item" @click="showUploadModal = true">⬆ 上传文件</div>
-        <div class="context-menu-item" @click="showNewFolderModal = true">📁 新建文件夹</div>
+        <div class="context-menu-item" @click="showUploadModal = true"><Icon name="upload" :size="14" /> 上传文件</div>
+        <div class="context-menu-item" @click="showNewFolderModal = true"><Icon name="new-folder" :size="14" /> 新建文件夹</div>
         <div class="context-menu-sep" />
-        <div class="context-menu-item" @click="refresh">🔄 刷新</div>
+        <div class="context-menu-item" @click="refresh"><Icon name="refresh" :size="14" /> 刷新</div>
       </template>
     </div>
 
@@ -197,7 +197,7 @@
             <div v-for="(f, i) in uploadFiles" :key="i" class="upload-file-item">
               <span>{{ f.name }}</span>
               <span style="color:#616161">{{ formatSize(f.size) }}</span>
-              <button style="border:none;background:none;color:#e81123;cursor:pointer" @click="uploadFiles.splice(i, 1)">✕</button>
+              <button style="border:none;background:none;color:#e81123;cursor:pointer;display:flex;align-items:center" @click="uploadFiles.splice(i, 1)"><Icon name="close" :size="12" /></button>
             </div>
           </div>
           <div v-if="uploadProgress" class="progress-bar">
@@ -247,7 +247,7 @@
         <div class="modal-header">{{ showCopyModal ? '复制到' : '移动到' }} ({{ copyMoveSources.length }} 项)</div>
         <div class="modal-body">
           <div style="margin-bottom:8px;max-height:80px;overflow-y:auto;font-size:12px;color:var(--win-text-secondary)">
-            <div v-for="s in copyMoveSources" :key="s.key||s.prefix" style="padding:1px 0">{{ itemIcon(s) }} {{ s.name }}</div>
+            <div v-for="s in copyMoveSources" :key="s.key||s.prefix" style="padding:1px 0; display:flex; align-items:center; gap:4px"><Icon :name="itemIconName(s)" :size="14" /> {{ s.name }}</div>
           </div>
           <select v-model="copyMoveBucket" class="modal-input" style="margin-bottom:8px">
             <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}</option>
@@ -273,7 +273,7 @@
           <p>确定要删除以下 {{ deleteTargets.length }} 个项目吗？此操作不可撤销。</p>
           <div class="delete-list">
             <div v-for="t in deleteTargets" :key="t.key||t.prefix" class="delete-item">
-              {{ itemIcon(t) }} {{ t.name }}
+              <Icon :name="itemIconName(t)" :size="14" /> {{ t.name }}
             </div>
           </div>
         </div>
@@ -313,6 +313,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import r2client from '../api/r2client.js'
 import TreeNode from '../components/TreeNode.vue'
+import Icon from '../components/Icon.vue'
 
 const router = useRouter()
 
@@ -477,11 +478,22 @@ function formatDate(d) {
   const dt = new Date(d)
   return dt.toLocaleDateString('zh-CN') + ' ' + dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
-function itemIcon(item) {
-  if (item.prefix !== undefined) return '📁'
+function itemIconName(item) {
+  if (item.prefix !== undefined) return 'folder'
   const ext = (item.name || '').split('.').pop().toLowerCase()
-  const m = { jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',webp:'🖼️',svg:'🖼️', mp4:'🎬',avi:'🎬',mov:'🎬', mkv:'🎬', mp3:'🎵',wav:'🎵',flac:'🎵', pdf:'📕', doc:'📄',docx:'📄', xls:'📊',xlsx:'📊', zip:'📦',rar:'📦','7z':'📦', js:'📜',ts:'📜',py:'📜',json:'📜', html:'🌐',css:'🎨', txt:'📝',md:'📝', exe:'⚙️' }
-  return m[ext] || '📄'
+  const m = {
+    jpg:'image', jpeg:'image', png:'image', gif:'image', webp:'image', svg:'image', bmp:'image',
+    mp4:'video', avi:'video', mov:'video', mkv:'video', wmv:'video',
+    mp3:'audio', wav:'audio', flac:'audio', aac:'audio', ogg:'audio',
+    pdf:'pdf',
+    doc:'doc', docx:'doc',
+    xls:'spreadsheet', xlsx:'spreadsheet',
+    zip:'archive', rar:'archive', '7z':'archive', tar:'archive', gz:'archive',
+    js:'code', ts:'code', py:'code', json:'code', html:'web', css:'code',
+    txt:'text', md:'text', log:'text',
+    exe:'app', msi:'app', dmg:'app', deb:'app',
+  }
+  return m[ext] || 'file-generic'
 }
 function itemType(item) {
   if (item.prefix !== undefined) return '文件夹'
