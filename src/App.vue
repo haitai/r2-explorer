@@ -115,12 +115,24 @@
 }
 
 .win-sidebar {
-  width: 220px;
-  min-width: 180px;
   background: var(--win-sidebar);
   border-right: 1px solid var(--win-border);
   overflow-y: auto;
   overflow-x: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer.dragging {
+  background: var(--win-accent);
 }
 
 .win-content {

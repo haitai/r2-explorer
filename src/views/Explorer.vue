@@ -31,7 +31,7 @@
     <!-- 主体 -->
     <div class="win-body">
       <!-- 侧栏 -->
-      <div class="win-sidebar">
+      <div class="win-sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-section">
           <div class="sidebar-title">存储桶</div>
           <div v-for="b in buckets" :key="b.name"
@@ -64,6 +64,13 @@
           />
         </div>
       </div>
+
+      <!-- 侧栏宽度调节手柄 -->
+      <div
+        class="sidebar-resizer"
+        :class="{ dragging: sidebarResizing }"
+        @mousedown="startSidebarResize"
+      ></div>
 
       <!-- 内容区 -->
       <div class="win-content"
@@ -361,6 +368,30 @@ const actionMenu = ref({ visible: false, right: 0, y: 0, item: null })
 // { mode: 'copy'|'cut', items: [...], sourceBucket: 'xxx' }
 const clipboard = ref({ mode: '', items: [], sourceBucket: '' })
 const pasteStatus = ref('')  // 粘贴操作时的状态文案
+
+// === 侧栏宽度调节 ===
+const sidebarWidth = ref(parseInt(localStorage.getItem('r2_sidebar_width')) || 220)
+const sidebarResizing = ref(false)
+function startSidebarResize(e) {
+  e.preventDefault()
+  sidebarResizing.value = true
+  const startX = e.clientX
+  const startWidth = sidebarWidth.value
+  const onMove = (ev) => {
+    const newWidth = Math.max(150, Math.min(500, startWidth + ev.clientX - startX))
+    sidebarWidth.value = newWidth
+  }
+  const onUp = () => {
+    sidebarResizing.value = false
+    localStorage.setItem('r2_sidebar_width', sidebarWidth.value)
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.userSelect = ''
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+  document.body.style.userSelect = 'none'
+}
 
 // === 列宽调整 ===
 const DEFAULT_COL_WIDTHS = { icon: 28, name: 250, size: 80, date: 140, type: 100, actions: 70 }
