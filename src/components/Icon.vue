@@ -21,10 +21,10 @@ const props = defineProps({
 // Windows 11 Fluent 风格图标（简化几何，单色/双色，线条+填充）
 const icons = {
   // 导航
-  back: '<path d="M10.5 3L6 7.5 10.5 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
-  forward: '<path d="M5.5 3L10 7.5 5.5 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
-  up: '<path d="M3 10L8 5 13 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
-  refresh: '<path d="M12.5 4.5A5 5 0 1 0 13.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M10 3h3.5v3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  back: '<path d="m7.333 4 -4 4 4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 8h8.667" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>',
+  forward: '<path d="m8.667 4 4 4 -4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.333 8h8.667" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>',
+  up: '<path d="m4 8.667 4 -4 4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4.667v8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>',
+  refresh: '<path d="M13.333 4v2.667h-2.667" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M12.667 6.667c-0.8 -1.6 -2.533 -2.667 -4.533 -2.667C5.467 4 3.333 6.133 3.333 8.8s2.133 4.8 4.8 4.8c2.267 0 4.2 -1.533 4.667 -3.667" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
 
   // 操作
   upload: '<path d="M8 11V3M4.5 6.5L8 3l3.5 3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M3 11v2.5h10V11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
