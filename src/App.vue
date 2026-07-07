@@ -9,11 +9,11 @@
 
 <style>
 :root {
-  --win-bg: #f3f3f3;
+  --win-bg: #ffffff;
   --win-border: #d5d5d5;
-  --win-sidebar: #e8e8e8;
+  --win-sidebar: #ffffff;
   --win-sidebar-hover: #cde8ff;
-  --win-sidebar-selected: #ccc;
+  --win-sidebar-selected: #cccccc;
   --win-selected: #cce8ff;
   --win-selected-border: #99d1ff;
   --win-toolbar-bg: #fafafa;
@@ -211,7 +211,7 @@
   align-items: center;
   padding: 4px 8px;
   background: var(--win-bg);
-  border-bottom: 1px solid var(--win-border);
+  border-bottom: none;
   font-size: 12px;
   color: var(--win-text-secondary);
   user-select: none;
