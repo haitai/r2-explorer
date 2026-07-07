@@ -1061,7 +1061,7 @@ onUnmounted(() => {
   align-items: center;
   padding: 4px 0;
   background: var(--win-bg);
-  border-bottom: 1px solid var(--win-border);
+  border-bottom: none;
   font-size: 12px;
   color: var(--win-text-secondary);
   user-select: none;
