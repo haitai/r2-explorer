@@ -304,6 +304,29 @@
   margin: 4px 8px;
 }
 
+/* 二级子菜单 */
+.context-menu-item.has-submenu {
+  position: relative;
+}
+
+.context-submenu {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  background: #fff;
+  border: 1px solid var(--win-border);
+  box-shadow: var(--win-shadow);
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 140px;
+  margin-left: 2px;
+}
+
+.context-menu-item.has-submenu:hover .context-submenu {
+  display: block;
+}
+
 /* 模态对话框 */
 .modal-overlay {
   position: fixed;

@@ -76,7 +76,7 @@
       <!-- 内容区 -->
       <div class="win-content"
         ref="winContent"
-        @contextmenu.prevent="onContentContextMenu"
+        @contextmenu.prevent.stop="onContentContextMenu"
         @mousedown="onContentMouseDown"
         @mouseup="onContentMouseUp">
 
@@ -176,11 +176,20 @@
         <div class="context-menu-sep" />
         <div class="context-menu-item danger" @click="deleteSingleItem(contextMenu.item)"><Icon name="delete" :size="14" /> 删除</div>
       </template>
-      <template v-if="contextMenu.target === 'content'">
-        <div class="context-menu-item" @click="showUploadModal = true"><Icon name="upload" :size="14" /> 上传文件</div>
-        <div class="context-menu-item" @click="showNewFolderModal = true"><Icon name="new-folder" :size="14" /> 新建文件夹</div>
+      <template v-if="contextMenu.target === 'content' || contextMenu.target === 'root'">
+        <div class="context-menu-item has-submenu">
+          <Icon name="detail-view" :size="14" /> 查看
+          <Icon name="chevron-right" :size="10" style="margin-left:auto" />
+          <div class="context-submenu">
+            <div class="context-menu-item" @click="viewMode = 'detail'"><Icon name="detail-view" :size="14" /> 详情</div>
+            <div class="context-menu-item" @click="viewMode = 'grid'"><Icon name="grid-view" :size="14" /> 网格</div>
+          </div>
+        </div>
         <div class="context-menu-sep" />
         <div class="context-menu-item" @click="refresh"><Icon name="refresh" :size="14" /> 刷新</div>
+        <div class="context-menu-sep" />
+        <div class="context-menu-item" @click="showNewFolderModal = true"><Icon name="new-folder" :size="14" /> 新建文件夹</div>
+        <div class="context-menu-item" @click="showUploadModal = true"><Icon name="upload" :size="14" /> 上传文件</div>
       </template>
     </div>
 
