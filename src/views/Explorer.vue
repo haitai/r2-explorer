@@ -19,16 +19,16 @@
         <!-- 存储桶段 -->
         <span class="crumb" v-if="currentBucket">
           <span class="crumb-text" @click="switchBucket(currentBucket)">{{ currentBucket }}</span>
-          <span class="crumb-arrow" @click.stop="toggleCrumbDropdown('bucket', $event)"><Icon name="chevron-down" :size="10" /></span>
         </span>
         <span class="crumb-placeholder" v-else>选择存储桶...</span>
+        <!-- 桶后的下箭头：点击弹出桶列表 -->
+        <span class="crumb-sep" v-if="currentBucket" @click.stop="toggleCrumbDropdown('bucket', $event)"><Icon name="chevron-down" :size="12" /></span>
         <!-- 路径段 -->
         <template v-for="(seg, i) in pathSegments" :key="i">
-          <span class="crumb-sep"><Icon name="chevron-right" :size="12" /></span>
           <span class="crumb">
             <span class="crumb-text" @click="navigateTo(seg.prefix)">{{ seg.name }}</span>
-            <span class="crumb-arrow" @click.stop="toggleCrumbDropdown(i, $event)"><Icon name="chevron-down" :size="10" /></span>
           </span>
+          <span class="crumb-sep" @click.stop="toggleCrumbDropdown(i, $event)"><Icon name="chevron-down" :size="12" /></span>
         </template>
         <!-- 下拉菜单 -->
         <div v-if="crumbDropdown.open" class="crumb-dropdown" :style="{ left: crumbDropdown.x + 'px', top: crumbDropdown.y + 'px' }" @click.stop>
@@ -1161,7 +1161,11 @@ onUnmounted(() => {
   align-items: center;
   color: var(--win-text-secondary);
   margin: 0 1px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
 }
+.crumb-sep:hover { background: var(--win-sidebar-hover); color: var(--win-text); }
 .crumb-placeholder {
   color: var(--win-text-secondary);
   padding: 0 8px;
