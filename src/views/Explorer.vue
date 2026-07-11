@@ -15,12 +15,32 @@
       <button class="win-toolbar-btn icon-only" @click="goForward" :disabled="!canGoForward" title="前进"><Icon name="forward" :size="16" /></button>
       <button class="win-toolbar-btn icon-only" @click="goUp" :disabled="!canGoUp" title="上一级"><Icon name="up" :size="16" /></button>
       <button class="win-toolbar-btn icon-only" @click="refresh" title="刷新"><Icon name="refresh" :size="16" /></button>
-      <select class="bucket-select" v-model="currentBucket" @change="onBucketChange">
-        <option value="" disabled>选择存储桶...</option>
-        <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}</option>
-      </select>
-      <div class="win-addressbar">
-        <input v-model="addressInput" @keydown.enter="navigateTo(addressInput)" placeholder="输入路径..." />
+      <div class="win-breadcrumb">
+        <!-- 存储桶段 -->
+        <span class="crumb" v-if="currentBucket">
+          <span class="crumb-text" @click="switchBucket(currentBucket)">{{ currentBucket }}</span>
+          <span class="crumb-arrow" @click.stop="toggleCrumbDropdown('bucket', $event)"><Icon name="chevron-down" :size="10" /></span>
+        </span>
+        <span class="crumb-placeholder" v-else>选择存储桶...</span>
+        <!-- 路径段 -->
+        <template v-for="(seg, i) in pathSegments" :key="i">
+          <span class="crumb-sep"><Icon name="chevron-right" :size="12" /></span>
+          <span class="crumb">
+            <span class="crumb-text" @click="navigateTo(seg.prefix)">{{ seg.name }}</span>
+            <span class="crumb-arrow" @click.stop="toggleCrumbDropdown(i, $event)"><Icon name="chevron-down" :size="10" /></span>
+          </span>
+        </template>
+        <!-- 下拉菜单 -->
+        <div v-if="crumbDropdown.open" class="crumb-dropdown" :style="{ left: crumbDropdown.x + 'px', top: crumbDropdown.y + 'px' }" @click.stop>
+          <div v-if="crumbDropdown.type === 'bucket'">
+            <div v-for="b in buckets" :key="b.name" class="crumb-dropdown-item" :class="{active: b.name === currentBucket}" @click="switchBucket(b.name); closeCrumbDropdown()">{{ b.name }}</div>
+          </div>
+          <div v-else>
+            <div v-if="crumbDropdown.loading" class="crumb-dropdown-loading">加载中...</div>
+            <div v-else-if="crumbDropdown.items.length === 0" class="crumb-dropdown-empty">无子文件夹</div>
+            <div v-for="item in crumbDropdown.items" :key="item.prefix" class="crumb-dropdown-item" @click="navigateTo(item.prefix); closeCrumbDropdown()">{{ item.name }}</div>
+          </div>
+        </div>
       </div>
       <button class="win-toolbar-btn primary" @click="showUploadModal = true" :disabled="!currentBucket"><Icon name="upload" :size="14" /> 上传</button>
       <button class="win-toolbar-btn" @click="showNewFolderModal = true" :disabled="!currentBucket"><Icon name="new-folder" :size="14" /> 新建</button>
@@ -471,6 +491,54 @@ const sortedItems = computed(() => {
 const totalSize = computed(() => files.value.reduce((s, f) => s + (f.size || 0), 0))
 const currentPathDisplay = computed(() => currentPath.value ? '/' + currentPath.value : '/')
 const rootFolders = computed(() => folders.value)
+
+// 面包屑路径段
+const pathSegments = computed(() => {
+  if (!currentPath.value) return []
+  const parts = currentPath.value.replace(/\/$/, '').split('/').filter(Boolean)
+  let prefix = ''
+  return parts.map(name => {
+    prefix += name + '/'
+    return { name, prefix }
+  })
+})
+
+// 面包屑下拉菜单
+const crumbDropdown = ref({ open: false, x: 0, y: 0, type: '', index: -1, items: [], loading: false })
+
+function toggleCrumbDropdown(type, e) {
+  if (crumbDropdown.value.open && crumbDropdown.value.type === type && crumbDropdown.value.index === (typeof type === 'number' ? type : -1)) {
+    closeCrumbDropdown()
+    return
+  }
+  const rect = e.currentTarget.getBoundingClientRect()
+  crumbDropdown.value = { open: true, x: rect.left, y: rect.bottom + 2, type, index: typeof type === 'number' ? type : -1, items: [], loading: type !== 'bucket' }
+  if (type === 'bucket') {
+    // 桶列表已在 buckets 中
+    return
+  }
+  // 加载该层级的子文件夹
+  const prefix = type === 0 ? '' : pathSegments.value[type - 1].prefix
+  loadSubFolders(prefix)
+}
+
+async function loadSubFolders(prefix) {
+  crumbDropdown.value.loading = true
+  try {
+    const data = await r2client.listObjects(currentBucket.value, prefix, '/')
+    const items = (data.prefixes || []).map(p => ({ prefix: p, name: p.replace(prefix, '').replace(/\/$/, '') }))
+    crumbDropdown.value.items = items
+  } catch (e) {
+    console.error(e)
+    crumbDropdown.value.items = []
+  } finally {
+    crumbDropdown.value.loading = false
+  }
+}
+
+function closeCrumbDropdown() {
+  crumbDropdown.value.open = false
+}
 const canGoBack = computed(() => navHistoryIdx.value > 0)
 const canGoForward = computed(() => navHistoryIdx.value < navHistory.value.length - 1)
 const canGoUp = computed(() => currentPath.value !== '')
@@ -916,7 +984,7 @@ async function confirmDelete() {
 }
 
 // === 右键菜单 ===
-function hideContextMenu() { contextMenu.value.visible = false; actionMenu.value.visible = false }
+function hideContextMenu() { contextMenu.value.visible = false; actionMenu.value.visible = false; closeCrumbDropdown() }
 function showActionMenu(item, e) {
   e.preventDefault()
   const rect = e.target.getBoundingClientRect()
@@ -1052,6 +1120,77 @@ onUnmounted(() => {
 .sidebar-section { padding:4px 0; }
 .sidebar-title { padding:6px 12px 4px; font-size:11px; color:var(--win-text-secondary); font-weight:600; }
 .bucket-select { height:32px; border:1px solid var(--win-border); border-radius:3px; background:#fff; font-size:13px; padding:0 8px; min-width:140px; }
+
+/* 面包屑导航 */
+.win-breadcrumb {
+  height: 32px;
+  background: #fff;
+  border: 1px solid var(--win-border);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 13px;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.crumb-text {
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px 0 0 3px;
+}
+.crumb-text:hover { background: var(--win-sidebar-hover); }
+.crumb-arrow {
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 0 3px 3px 0;
+  display: inline-flex;
+  align-items: center;
+}
+.crumb-arrow:hover { background: var(--win-sidebar-hover); }
+.crumb-sep {
+  display: inline-flex;
+  align-items: center;
+  color: var(--win-text-secondary);
+  margin: 0 1px;
+}
+.crumb-placeholder {
+  color: var(--win-text-secondary);
+  padding: 0 8px;
+}
+.crumb-dropdown {
+  position: fixed;
+  background: #fff;
+  border: 1px solid var(--win-border);
+  box-shadow: var(--win-shadow);
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 160px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 9999;
+}
+.crumb-dropdown-item {
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crumb-dropdown-item:hover { background: var(--win-sidebar-hover); }
+.crumb-dropdown-item.active { font-weight: 600; color: var(--win-accent); }
+.crumb-dropdown-loading, .crumb-dropdown-empty {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--win-text-secondary);
+}
 .bucket-info { font-size:10px; color:var(--win-text-secondary); margin-left:4px; }
 .add-bucket { color:var(--win-accent); }
 .upload-area { text-align:center; padding:16px; border:2px dashed var(--win-border); border-radius:8px; }

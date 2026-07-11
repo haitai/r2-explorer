@@ -92,27 +92,6 @@
   color: var(--win-danger);
 }
 
-.win-addressbar {
-  height: 32px;
-  background: #fff;
-  border: 1px solid var(--win-border);
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  font-size: 13px;
-  flex: 1;
-}
-
-.win-addressbar input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  outline: none;
-  color: var(--win-text);
-}
-
 .win-body {
   display: flex;
   flex: 1;

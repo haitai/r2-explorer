@@ -38,6 +38,7 @@ const icons = {
   preview: '<path d="M1.5 8S4 4 8 4s6.5 4 6.5 4-2.5 4-6.5 4-6.5-4-6.5-4z" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="8" r="1.8" stroke="currentColor" stroke-width="1.2" fill="none"/>',
   'more-h': '<circle cx="3" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="13" cy="8" r="1.2" fill="currentColor"/>',
   'chevron-right': '<path d="m6 4 4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  'chevron-down': '<path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>',
 
   // 视图切换
