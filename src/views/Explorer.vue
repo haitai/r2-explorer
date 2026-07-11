@@ -133,7 +133,7 @@
             @mousedown.left.exact="onItemMouseDown(item, $event)"
             @click="onItemClick(item, $event)"
             @dblclick="openItem(item)"
-            @contextmenu.prevent.stop="onItemContextMenu(item, $event)">
+            @contextmenu.prevent.stop="onItemContextMenu(item, $event)" :title="item.name">
             <span class="icon">
               <img v-if="isImage(item)" :src="getThumbUrl(item)" class="grid-thumb" loading="lazy" />
               <Icon v-else :name="itemIconName(item)" :size="36" />
