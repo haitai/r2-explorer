@@ -21,14 +21,14 @@
           <span class="crumb-text" @click="switchBucket(currentBucket)">{{ currentBucket }}</span>
         </span>
         <span class="crumb-placeholder" v-else>选择存储桶...</span>
-        <!-- 桶后的下箭头：点击弹出桶列表 -->
-        <span class="crumb-sep" v-if="currentBucket" @click.stop="toggleCrumbDropdown('bucket', $event)"><Icon name="chevron-down" :size="12" /></span>
+        <!-- 桶后的箭头：点击弹出桶列表 -->
+        <span class="crumb-sep" v-if="currentBucket" @click.stop="toggleCrumbDropdown('bucket', $event)"><Icon :name="(crumbDropdown.open && crumbDropdown.type === 'bucket') ? 'chevron-down' : 'chevron-right'" :size="12" /></span>
         <!-- 路径段 -->
         <template v-for="(seg, i) in pathSegments" :key="i">
           <span class="crumb">
             <span class="crumb-text" @click="navigateTo(seg.prefix)">{{ seg.name }}</span>
           </span>
-          <span class="crumb-sep" @click.stop="toggleCrumbDropdown(i, $event)"><Icon name="chevron-down" :size="12" /></span>
+          <span class="crumb-sep" @click.stop="toggleCrumbDropdown(i, $event)"><Icon :name="(crumbDropdown.open && crumbDropdown.type === i) ? 'chevron-down' : 'chevron-right'" :size="12" /></span>
         </template>
         <!-- 下拉菜单 -->
         <div v-if="crumbDropdown.open" class="crumb-dropdown" :style="{ left: crumbDropdown.x + 'px', top: crumbDropdown.y + 'px' }" @click.stop>
