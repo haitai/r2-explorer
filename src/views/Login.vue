@@ -27,13 +27,11 @@
           autofocus
         />
         <button class="pwd-arrow" @click="doLogin" :disabled="loading" aria-label="提交">
-          <svg viewBox="0 0 20 20" width="20" height="20"><path d="M9 4l7 6-7 6" fill="#fff"/></svg>
+          <ArrowRight :size="18" :stroke-width="2" />
         </button>
       </div>
       <div v-if="loading" class="loading-indicator">
-        <svg class="spinner" viewBox="0 0 24 24" width="20" height="20">
-          <circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2" fill="none" stroke-dasharray="60" stroke-dashoffset="20"/>
-        </svg>
+        <Loader :size="18" :stroke-width="2" class="spinner" />
         <span>正在验证...</span>
       </div>
       <div v-if="error && !loading" class="error-text">{{ error }}</div>
@@ -48,6 +46,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import r2client from '../api/r2client.js'
+import { ArrowRight, Loader } from 'lucide-vue-next'
 
 const router = useRouter()
 const password = ref('')

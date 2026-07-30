@@ -2,7 +2,7 @@
   <div>
     <div class="tree-node" :class="{ active: currentPath === folder.prefix }" :title="folder.name" @click="$emit('navigate', folder.prefix)">
       <span class="expand-icon" @click.stop="$emit('toggle-expand', folder.prefix)">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path :d="isExpanded ? 'M2 3.5L5 6.5 8 3.5' : 'M3.5 2L6.5 5 3.5 8'" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <Icon :name="isExpanded ? 'chevron-down' : 'chevron-right'" :size="12" />
       </span>
       <span class="icon"><Icon name="folder" :size="16" /></span>
       <span>{{ folder.name }}</span>

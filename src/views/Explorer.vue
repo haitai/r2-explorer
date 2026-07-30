@@ -120,10 +120,10 @@
           <div v-if="sel.isSelecting" class="selection-box" :style="selBoxStyle"></div>
           <div class="detail-header" :style="detailGridStyle">
             <span class="col col-icon"></span>
-            <span class="col col-name" @click="sortBy('name')">名称 {{ sortIndicator('name') }}<span class="resize-handle" @mousedown.prevent="startResize('name', $event)" /></span>
-            <span class="col col-size" @click="sortBy('size')">大小 {{ sortIndicator('size') }}<span class="resize-handle" @mousedown.prevent="startResize('size', $event)" /></span>
-            <span class="col col-date" @click="sortBy('date')">修改日期 {{ sortIndicator('date') }}<span class="resize-handle" @mousedown.prevent="startResize('date', $event)" /></span>
-            <span class="col col-type" @click="sortBy('type')">类型 {{ sortIndicator('type') }}<span class="resize-handle" @mousedown.prevent="startResize('type', $event)" /></span>
+            <span class="col col-name" @click="sortBy('name')">名称 <Icon v-if="sortIndicator('name') === 'asc'" name="chevron-up" :size="10" /><Icon v-else-if="sortIndicator('name') === 'desc'" name="chevron-down" :size="10" /><span class="resize-handle" @mousedown.prevent="startResize('name', $event)" /></span>
+            <span class="col col-size" @click="sortBy('size')">大小 <Icon v-if="sortIndicator('size') === 'asc'" name="chevron-up" :size="10" /><Icon v-else-if="sortIndicator('size') === 'desc'" name="chevron-down" :size="10" /><span class="resize-handle" @mousedown.prevent="startResize('size', $event)" /></span>
+            <span class="col col-date" @click="sortBy('date')">修改日期 <Icon v-if="sortIndicator('date') === 'asc'" name="chevron-up" :size="10" /><Icon v-else-if="sortIndicator('date') === 'desc'" name="chevron-down" :size="10" /><span class="resize-handle" @mousedown.prevent="startResize('date', $event)" /></span>
+            <span class="col col-type" @click="sortBy('type')">类型 <Icon v-if="sortIndicator('type') === 'asc'" name="chevron-up" :size="10" /><Icon v-else-if="sortIndicator('type') === 'desc'" name="chevron-down" :size="10" /><span class="resize-handle" @mousedown.prevent="startResize('type', $event)" /></span>
             <span class="col col-actions">操作</span>
           </div>
           <div v-for="item in sortedItems" :key="item.key || item.prefix"
@@ -848,7 +848,7 @@ async function doPaste() {
 }
 
 function sortBy(f) { if (justResized.value) return; sortField.value === f ? sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc' : (sortField.value = f, sortOrder.value = 'asc') }
-function sortIndicator(f) { return sortField.value === f ? (sortOrder.value === 'asc' ? '↑' : '↓') : '' }
+function sortIndicator(f) { return sortField.value === f ? (sortOrder.value === 'asc' ? 'asc' : 'desc') : '' }
 function toggleView() { viewMode.value = viewMode.value === 'detail' ? 'grid' : 'detail' }
 function toggleExpand(prefix) { expandedFolders.value.has(prefix) ? expandedFolders.value.delete(prefix) : expandedFolders.value.add(prefix) }
 
