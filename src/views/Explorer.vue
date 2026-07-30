@@ -63,6 +63,7 @@
           <template v-if="sidebarComputerExpanded">
             <div v-for="b in buckets" :key="b.name" class="bucket-group">
               <div class="tree-node"
+                :class="{ active: currentBucket === b.name && currentPath === '' }"
                 :title="b.name"
                 @click="switchBucket(b.name)">
                 <span class="expand-arrow" @click.stop="toggleBucketExpand(b.name)">
@@ -72,7 +73,6 @@
                 <span class="bucket-name-text">{{ b.name }}</span>
               </div>
               <div v-if="expandedBuckets.has(b.name)" class="bucket-tree">
-                <div v-if="!(bucketFoldersCache[b.name] || []).length" class="tree-node empty-hint" style="font-size:11px; color:var(--win-text-secondary);">空</div>
                 <tree-node
                   v-for="folder in (bucketFoldersCache[b.name] || [])"
                   :key="b.name + '/' + folder.prefix"
