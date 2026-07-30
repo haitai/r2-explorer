@@ -913,7 +913,7 @@ async function loadBucketRootFolders(bucketName) {
 function showBucketsOverview() {
   showBucketOverview.value = true
   currentBucket.value = ''
-  r2client.currentBucket = ''
+  r2client.setBucket('')
   currentPath.value = ''
   addressInput.value = ''
   navHistory.value = ['']
