@@ -1191,6 +1191,11 @@ onMounted(async () => {
   if (savedBucket && buckets.value.find(b => b.name === savedBucket)) {
     currentBucket.value = savedBucket
     r2client.setBucket(savedBucket)
+    showBucketOverview.value = false
+    currentPath.value = savedPath
+    addressInput.value = savedPath
+    navHistory.value = [savedPath]
+    navHistoryIdx.value = 0
     expandedBuckets.value.add(savedBucket)
     if (!bucketFoldersCache.value[savedBucket]) loadBucketRootFolders(savedBucket)
     await loadDirectory(savedPath)
