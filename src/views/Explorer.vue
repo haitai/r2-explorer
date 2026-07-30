@@ -936,9 +936,13 @@ function navigateToFromBucket(bucketName, path) {
 }
 function switchBucket(name) {
   if (currentBucket.value === name) {
-    // 已在该桶，仅关闭概览页
+    // 已在该桶，回到桶根目录
     showBucketOverview.value = false
-    persistPath()
+    currentPath.value = ''
+    addressInput.value = ''
+    navHistory.value = ['']
+    navHistoryIdx.value = 0
+    loadDirectory('')
     return
   }
   currentBucket.value = name
