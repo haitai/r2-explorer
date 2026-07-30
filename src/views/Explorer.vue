@@ -63,7 +63,6 @@
           <template v-if="sidebarComputerExpanded">
             <div v-for="b in buckets" :key="b.name" class="bucket-group">
               <div class="tree-node"
-                :class="{ active: currentBucket === b.name && !showBucketOverview }"
                 :title="b.name"
                 @click="switchBucket(b.name)">
                 <span class="expand-arrow" @click.stop="toggleBucketExpand(b.name)">
@@ -73,9 +72,7 @@
                 <span class="bucket-name-text">{{ b.name }}</span>
               </div>
               <div v-if="expandedBuckets.has(b.name)" class="bucket-tree">
-                <div class="tree-node" @click="navigateTo('')" :class="{ active: currentBucket === b.name && currentPath === '' }" title="根目录">
-                  <span class="icon"><Icon name="home" :size="16" /></span> 根目录
-                </div>
+                <div v-if="!(bucketFoldersCache[b.name] || []).length" class="tree-node empty-hint" style="font-size:11px; color:var(--win-text-secondary);">空</div>
                 <tree-node
                   v-for="folder in (bucketFoldersCache[b.name] || [])"
                   :key="b.name + '/' + folder.prefix"
@@ -112,7 +109,7 @@
 
         <!-- 框选矩形（用于网格视图） -->
         <div v-if="sel.isSelecting && viewMode === 'grid'" class="selection-box" :style="selBoxStyle"></div>
-        <div v-if="showBucketOverview || !currentBucket" class="empty-state bucket-overview">
+        <div v-if="!currentBucket" class="empty-state bucket-overview">
           <div class="overview-header">
             <span class="icon"><Icon name="computer" :size="48" /></span>
             <span class="text" style="font-size:18px">此电脑</span>
@@ -921,12 +918,12 @@ function showBucketsOverview() {
   addressInput.value = ''
   navHistory.value = ['']
   navHistoryIdx.value = 0
+  selectedItems.value = []
 }
 function navigateToFromBucket(bucketName, path) {
   if (currentBucket.value !== bucketName) {
     currentBucket.value = bucketName
     r2client.setBucket(bucketName)
-    showBucketOverview.value = false
     currentPath.value = path
     addressInput.value = path
     navHistory.value = [path]
@@ -937,6 +934,11 @@ function navigateToFromBucket(bucketName, path) {
   }
 }
 function switchBucket(name) {
+  if (currentBucket.value === name) {
+    // 已在该桶，仅关闭概览页
+    showBucketOverview.value = false
+    return
+  }
   currentBucket.value = name
   r2client.setBucket(name)
   showBucketOverview.value = false
@@ -946,6 +948,7 @@ function switchBucket(name) {
   navHistoryIdx.value = 0
   // 自动展开该桶
   expandedBuckets.value.add(name)
+  if (!bucketFoldersCache.value[name]) loadBucketRootFolders(name)
   loadDirectory('')
 }
 function onBucketChange() { switchBucket(currentBucket.value) }
@@ -976,7 +979,6 @@ async function loadDirectory(prefix = '') {
   } finally { loading.value = false }
 }
 async function navigateTo(prefix) {
-  showBucketOverview.value = false
   currentPath.value = prefix; addressInput.value = prefix
   const newH = navHistory.value.slice(0, navHistoryIdx.value + 1)
   newH.push(prefix)
