@@ -53,36 +53,46 @@
       <!-- 侧栏 -->
       <div class="win-sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-section">
-          <div class="sidebar-title">存储桶</div>
-          <div v-for="b in buckets" :key="b.name"
-            class="tree-node"
-            :class="{ active: currentBucket === b.name }"
-            :title="b.name"
-            @click="switchBucket(b.name)">
-            <span class="icon"><Icon name="bucket" :size="16" /></span>
-            <span>{{ b.name }}</span>
-            <span class="bucket-info">{{ b.location }}</span>
+          <div class="sidebar-title clickable" @click="showBucketsOverview" :class="{ active: showBucketOverview }">
+            <span class="expand-arrow" @click.stop="sidebarComputerExpanded = !sidebarComputerExpanded">
+              <Icon :name="sidebarComputerExpanded ? 'chevron-down' : 'chevron-right'" :size="12" />
+            </span>
+            <span class="icon"><Icon name="computer" :size="16" /></span>
+            <span>此电脑</span>
           </div>
-          <div class="tree-node add-bucket" @click="showCreateBucketModal = true">
-            <span class="icon"><Icon name="new-bucket" :size="16" /></span> <span>新建存储桶</span>
-          </div>
-        </div>
-
-        <div v-if="currentBucket" class="sidebar-section">
-          <div class="sidebar-title">目录树</div>
-          <div class="tree-node" @click="navigateTo('')" :class="{ active: currentPath === '' }" title="根目录">
-            <span class="icon"><Icon name="home" :size="16" /></span> 根目录
-          </div>
-          <tree-node
-            v-for="folder in rootFolders"
-            :key="folder.prefix"
-            :folder="folder"
-            :bucket="currentBucket"
-            :current-path="currentPath"
-            :expanded-folders="expandedFolders"
-            @navigate="navigateTo"
-            @toggle-expand="toggleExpand"
-          />
+          <template v-if="sidebarComputerExpanded">
+            <div v-for="b in buckets" :key="b.name" class="bucket-group">
+              <div class="tree-node"
+                :class="{ active: currentBucket === b.name && !showBucketOverview }"
+                :title="b.name"
+                @click="switchBucket(b.name)">
+                <span class="expand-arrow" @click.stop="toggleBucketExpand(b.name)">
+                  <Icon :name="expandedBuckets.has(b.name) ? 'chevron-down' : 'chevron-right'" :size="12" />
+                </span>
+                <span class="icon"><Icon name="bucket" :size="16" /></span>
+                <span class="bucket-name-text">{{ b.name }}</span>
+              </div>
+              <div v-if="expandedBuckets.has(b.name)" class="bucket-tree">
+                <div class="tree-node" @click="navigateTo('')" :class="{ active: currentBucket === b.name && currentPath === '' }" title="根目录">
+                  <span class="icon"><Icon name="home" :size="16" /></span> 根目录
+                </div>
+                <tree-node
+                  v-for="folder in (bucketFoldersCache[b.name] || [])"
+                  :key="b.name + '/' + folder.prefix"
+                  :folder="folder"
+                  :bucket="b.name"
+                  :current-path="currentPath"
+                  :current-bucket="currentBucket"
+                  :expanded-folders="expandedFolders"
+                  @navigate="(path) => navigateToFromBucket(b.name, path)"
+                  @toggle-expand="toggleExpand"
+                />
+              </div>
+            </div>
+            <div class="tree-node add-bucket" @click="showCreateBucketModal = true">
+              <span class="icon"><Icon name="new-bucket" :size="16" /></span> <span>新建存储桶</span>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -102,9 +112,27 @@
 
         <!-- 框选矩形（用于网格视图） -->
         <div v-if="sel.isSelecting && viewMode === 'grid'" class="selection-box" :style="selBoxStyle"></div>
-        <div v-if="!currentBucket" class="empty-state">
-          <span class="icon" style="font-size:64px"><Icon name="bucket" :size="64" /></span>
-          <span class="text" style="font-size:16px">请从左侧选择一个存储桶，或创建新存储桶</span>
+        <div v-if="showBucketOverview || !currentBucket" class="empty-state bucket-overview">
+          <div class="overview-header">
+            <span class="icon"><Icon name="computer" :size="48" /></span>
+            <span class="text" style="font-size:18px">此电脑</span>
+          </div>
+          <div class="overview-subtitle">选择一个存储桶开始浏览，或点击左侧「新建存储桶」</div>
+          <div class="bucket-cards">
+            <div v-for="b in buckets" :key="b.name" class="bucket-card" @click="switchBucket(b.name)">
+              <span class="icon"><Icon name="bucket" :size="32" /></span>
+              <div class="bucket-card-info">
+                <div class="bucket-card-name">{{ b.name }}</div>
+                <div class="bucket-card-loc">{{ b.location || '—' }}</div>
+              </div>
+            </div>
+            <div class="bucket-card add-bucket-card" @click="showCreateBucketModal = true">
+              <span class="icon"><Icon name="new-bucket" :size="32" /></span>
+              <div class="bucket-card-info">
+                <div class="bucket-card-name">新建存储桶</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div v-else-if="loading" class="loading">加载中...</div>
@@ -353,6 +381,10 @@ const currentBucket = ref(r2client.currentBucket)
 const showCreateBucketModal = ref(false)
 const newBucketName = ref('')
 const newBucketLocation = ref('apac')
+const expandedBuckets = ref(new Set())  // 展开的存储桶
+const showBucketOverview = ref(true)   // 显示存储桶概览页（首次登录）
+const bucketFoldersCache = ref({})  // { bucketName: [rootFolders] }
+const sidebarComputerExpanded = ref(true)  // 「此电脑」展开状态
 
 // === 导航状态 ===
 const currentPath = ref('')
@@ -859,13 +891,61 @@ async function loadBuckets() {
     buckets.value = data.buckets || []
   } catch (e) { console.error(e) }
 }
-function switchBucket(name) {
-  currentBucket.value = name
-  r2client.setBucket(name)
+function toggleBucketExpand(name) {
+  if (expandedBuckets.value.has(name)) {
+    expandedBuckets.value.delete(name)
+  } else {
+    expandedBuckets.value.add(name)
+    if (!bucketFoldersCache.value[name]) {
+      loadBucketRootFolders(name)
+    }
+  }
+}
+async function loadBucketRootFolders(bucketName) {
+  try {
+    const data = await r2client.listObjects(bucketName, '', '/')
+    bucketFoldersCache.value[bucketName] = (data.prefixes || []).map(p => ({
+      prefix: p,
+      name: p.replace(/^\//, '').replace(/\/$/, ''),
+    }))
+  } catch (e) {
+    console.error('Failed to load bucket root folders:', e)
+    bucketFoldersCache.value[bucketName] = []
+  }
+}
+function showBucketsOverview() {
+  showBucketOverview.value = true
+  currentBucket.value = ''
+  r2client.currentBucket = ''
   currentPath.value = ''
   addressInput.value = ''
   navHistory.value = ['']
   navHistoryIdx.value = 0
+}
+function navigateToFromBucket(bucketName, path) {
+  if (currentBucket.value !== bucketName) {
+    currentBucket.value = bucketName
+    r2client.setBucket(bucketName)
+    showBucketOverview.value = false
+    currentPath.value = path
+    addressInput.value = path
+    navHistory.value = [path]
+    navHistoryIdx.value = 0
+    loadDirectory(path)
+  } else {
+    navigateTo(path)
+  }
+}
+function switchBucket(name) {
+  currentBucket.value = name
+  r2client.setBucket(name)
+  showBucketOverview.value = false
+  currentPath.value = ''
+  addressInput.value = ''
+  navHistory.value = ['']
+  navHistoryIdx.value = 0
+  // 自动展开该桶
+  expandedBuckets.value.add(name)
   loadDirectory('')
 }
 function onBucketChange() { switchBucket(currentBucket.value) }
@@ -896,6 +976,7 @@ async function loadDirectory(prefix = '') {
   } finally { loading.value = false }
 }
 async function navigateTo(prefix) {
+  showBucketOverview.value = false
   currentPath.value = prefix; addressInput.value = prefix
   const newH = navHistory.value.slice(0, navHistoryIdx.value + 1)
   newH.push(prefix)
@@ -1196,6 +1277,26 @@ onUnmounted(() => {
   color: var(--win-text-secondary);
 }
 .bucket-info { font-size:10px; color:var(--win-text-secondary); margin-left:4px; }
+.sidebar-title.clickable { cursor:pointer; display:flex; align-items:center; gap:4px; padding:6px 12px 4px; }
+.sidebar-title.clickable:hover { background:var(--win-sidebar-hover); }
+.sidebar-title.clickable.active { background:var(--win-sidebar-active, #e0e0e0); color:var(--win-accent); }
+.sidebar-title.clickable .expand-arrow { display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; cursor:pointer; border-radius:3px; }
+.sidebar-title.clickable .expand-arrow:hover { background:var(--win-sidebar-hover); }
+.expand-arrow { display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; cursor:pointer; border-radius:3px; flex-shrink:0; }
+.expand-arrow:hover { background:var(--win-sidebar-hover); }
+.bucket-group { }
+.bucket-name-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bucket-tree { padding-left:20px; }
+.bucket-overview { display:flex; flex-direction:column; align-items:center; padding-top:60px; }
+.overview-header { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+.overview-subtitle { font-size:13px; color:var(--win-text-secondary); margin-bottom:24px; }
+.bucket-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; max-width:800px; width:100%; padding:0 24px; box-sizing:border-box; }
+.bucket-card { display:flex; align-items:center; gap:12px; padding:16px; border:1px solid var(--win-border); border-radius:8px; cursor:pointer; background:#fff; transition:border-color .15s, box-shadow .15s; }
+.bucket-card:hover { border-color:var(--win-accent); box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+.bucket-card .bucket-card-info { flex:1; min-width:0; }
+.bucket-card-name { font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bucket-card-loc { font-size:11px; color:var(--win-text-secondary); margin-top:2px; }
+.add-bucket-card { color:var(--win-accent); border-style:dashed; }
 .add-bucket { color:var(--win-accent); }
 .upload-area { text-align:center; padding:16px; border:2px dashed var(--win-border); border-radius:8px; }
 .upload-list { margin-top:12px; max-height:200px; overflow-y:auto; }

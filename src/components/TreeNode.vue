@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="tree-node" :class="{ active: currentPath === folder.prefix }" :title="folder.name" @click="$emit('navigate', folder.prefix)">
+    <div class="tree-node" :class="{ active: currentBucket === bucket && currentPath === folder.prefix }" :title="folder.name" @click="$emit('navigate', folder.prefix)">
       <span class="expand-icon" @click.stop="$emit('toggle-expand', folder.prefix)">
         <Icon :name="isExpanded ? 'chevron-down' : 'chevron-right'" :size="12" />
       </span>
@@ -14,6 +14,7 @@
         :folder="sub"
         :bucket="bucket"
         :current-path="currentPath"
+        :current-bucket="currentBucket"
         :expanded-folders="expandedFolders"
         @navigate="$emit('navigate', $event)"
         @toggle-expand="$emit('toggle-expand', $event)"
@@ -31,6 +32,7 @@ const props = defineProps({
   folder: Object,
   bucket: String,
   currentPath: String,
+  currentBucket: String,
   expandedFolders: Set,
 })
 

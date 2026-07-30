@@ -14,7 +14,7 @@ import {
   Database, Home, LogOut,
   Folder, FolderOpen,
   Image, Video, Music, FileText, FileType, FileArchive, FileCode, Globe, File,
-  LayoutDashboard, HardDrive,
+  LayoutDashboard, HardDrive, Monitor,
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -51,6 +51,7 @@ const map = {
   bucket: Database,
   home: Home,
   logout: LogOut,
+  computer: Monitor,
   // 文件类型
   folder: Folder,
   'folder-open': FolderOpen,
