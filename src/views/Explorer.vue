@@ -53,7 +53,7 @@
       <!-- 侧栏 -->
       <div class="win-sidebar" :style="{ width: sidebarWidth + 'px' }">
         <div class="sidebar-section">
-          <div class="sidebar-title clickable" @click="showBucketsOverview" :class="{ active: showBucketOverview }">
+          <div class="sidebar-title clickable" @click="showBucketsOverview" :class="{ active: !currentBucket }">
             <span class="expand-arrow" @click.stop="sidebarComputerExpanded = !sidebarComputerExpanded">
               <Icon :name="sidebarComputerExpanded ? 'chevron-down' : 'chevron-right'" :size="12" />
             </span>
@@ -919,6 +919,7 @@ function showBucketsOverview() {
   navHistory.value = ['']
   navHistoryIdx.value = 0
   selectedItems.value = []
+  persistPath()
 }
 function navigateToFromBucket(bucketName, path) {
   if (currentBucket.value !== bucketName) {
@@ -937,6 +938,7 @@ function switchBucket(name) {
   if (currentBucket.value === name) {
     // 已在该桶，仅关闭概览页
     showBucketOverview.value = false
+    persistPath()
     return
   }
   currentBucket.value = name
@@ -977,6 +979,7 @@ async function loadDirectory(prefix = '') {
     if (e.message === 'AUTH_EXPIRED') { router.push('/login'); return }
     console.error(e)
   } finally { loading.value = false }
+  persistPath()
 }
 async function navigateTo(prefix) {
   currentPath.value = prefix; addressInput.value = prefix
@@ -1182,8 +1185,29 @@ onMounted(async () => {
   document.addEventListener('keydown', onGlobalKeydown)
   window.addEventListener('paste', onGlobalPaste)
   await loadBuckets()
-  if (currentBucket.value) await loadDirectory('')
+  // 从 localStorage 恢复上次的桶和路径
+  const savedBucket = localStorage.getItem('r2_last_bucket') || ''
+  const savedPath = localStorage.getItem('r2_last_path') || ''
+  if (savedBucket && buckets.value.find(b => b.name === savedBucket)) {
+    currentBucket.value = savedBucket
+    r2client.setBucket(savedBucket)
+    expandedBuckets.value.add(savedBucket)
+    if (!bucketFoldersCache.value[savedBucket]) loadBucketRootFolders(savedBucket)
+    await loadDirectory(savedPath)
+  } else {
+    showBucketOverview.value = true
+  }
 })
+
+function persistPath() {
+  if (currentBucket.value) {
+    localStorage.setItem('r2_last_bucket', currentBucket.value)
+    localStorage.setItem('r2_last_path', currentPath.value || '')
+  } else {
+    localStorage.removeItem('r2_last_bucket')
+    localStorage.removeItem('r2_last_path')
+  }
+}
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
