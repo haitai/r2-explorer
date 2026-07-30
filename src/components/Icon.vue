@@ -42,6 +42,7 @@ const map = {
   'more-h': MoreHorizontal,
   'chevron-right': ChevronRight,
   'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
   close: X,
   // 视图切换
   'detail-view': List,
