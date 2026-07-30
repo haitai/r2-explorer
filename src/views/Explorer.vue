@@ -226,8 +226,8 @@
           <Icon name="detail-view" :size="14" /> 查看
           <Icon name="chevron-right" :size="10" style="margin-left:auto" />
           <div class="context-submenu">
-            <div class="context-menu-item" @click="viewMode = 'detail'"><Icon name="detail-view" :size="14" /> 详情</div>
-            <div class="context-menu-item" @click="viewMode = 'grid'"><Icon name="grid-view" :size="14" /> 网格</div>
+            <div class="context-menu-item" @click="setViewMode('detail')"><Icon name="detail-view" :size="14" /> 详情</div>
+            <div class="context-menu-item" @click="setViewMode('grid')"><Icon name="grid-view" :size="14" /> 网格</div>
           </div>
         </div>
         <div class="context-menu-sep" />
@@ -394,7 +394,7 @@ const expandedFolders = ref(new Set())
 // === 内容状态 ===
 const folders = ref([])
 const files = ref([])
-const viewMode = ref('detail')
+const viewMode = ref(localStorage.getItem('r2_view_mode') || 'detail')
 const sortField = ref('name')
 const sortOrder = ref('asc')
 const selectedItems = ref([])
@@ -878,7 +878,8 @@ async function doPaste() {
 
 function sortBy(f) { if (justResized.value) return; sortField.value === f ? sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc' : (sortField.value = f, sortOrder.value = 'asc') }
 function sortIndicator(f) { return sortField.value === f ? (sortOrder.value === 'asc' ? 'asc' : 'desc') : '' }
-function toggleView() { viewMode.value = viewMode.value === 'detail' ? 'grid' : 'detail' }
+function toggleView() { viewMode.value = viewMode.value === 'detail' ? 'grid' : 'detail'; localStorage.setItem('r2_view_mode', viewMode.value) }
+function setViewMode(mode) { viewMode.value = mode; localStorage.setItem('r2_view_mode', mode) }
 function toggleExpand(prefix) { expandedFolders.value.has(prefix) ? expandedFolders.value.delete(prefix) : expandedFolders.value.add(prefix) }
 
 // === 桶操作 ===
