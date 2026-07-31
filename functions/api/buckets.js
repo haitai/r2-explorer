@@ -43,7 +43,13 @@ export async function onRequestGet(context) {
 
     const rawBuckets = data.result.buckets || []
 
-    const buckets = rawBuckets.map(b => ({ name: b.name, creation_date: b.creation_date, location: b.location }))
+    const buckets = rawBuckets.map(b => ({
+      name: b.name,
+      creation_date: b.creation_date,
+      location: b.location,
+      storage_class: b.storage_class,
+      jurisdiction: b.jurisdiction,
+    }))
 
     return new Response(JSON.stringify({
       buckets,

@@ -120,7 +120,13 @@
               <span class="icon"><Icon name="bucket" :size="32" /></span>
               <div class="bucket-card-info">
                 <div class="bucket-card-name">{{ b.name }}</div>
-                <div class="bucket-card-loc">{{ b.location || '—' }}</div>
+                <div class="bucket-card-meta">
+                  <span class="meta-loc" :title="locationLabel(b.location)">{{ locationShort(b.location) }}</span>
+                  <span class="meta-sep">·</span>
+                  <span class="meta-class">{{ b.storage_class === 'InfrequentAccess' ? '低频' : '标准' }}</span>
+                  <span class="meta-sep">·</span>
+                  <span class="meta-date" :title="b.creation_date">{{ formatDateShort(b.creation_date) }}</span>
+                </div>
               </div>
             </div>
             <div class="bucket-card add-bucket-card" @click="showCreateBucketModal = true">
@@ -579,6 +585,16 @@ function formatSize(bytes) {
   let i = 0, size = bytes
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
   return size.toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
+}
+
+const LOC_NAMES = { apac: '亚太', eeur: '东欧', enam: '北美东', weur: '西欧', wnam: '北美西', oc: '大洋洲' }
+function locationShort(loc) { return LOC_NAMES[loc] || loc || '—' }
+function locationLabel(loc) { const s = LOC_NAMES[loc] || loc; return s ? `${s} (${loc || 'default'})` : '默认' }
+function formatDateShort(d) {
+  if (!d) return '—'
+  const dt = new Date(d)
+  if (isNaN(dt)) return '—'
+  return dt.toLocaleDateString('zh-CN')
 }
 function formatDate(d) {
   if (!d) return ''
@@ -1331,6 +1347,9 @@ onUnmounted(() => {
 .bucket-card:hover { border-color:var(--win-accent); box-shadow:0 2px 8px rgba(0,0,0,0.08); }
 .bucket-card .bucket-card-info { flex:1; min-width:0; }
 .bucket-card-name { font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bucket-card-meta { font-size:11px; color:var(--win-text-secondary); margin-top:2px; display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.bucket-card-meta .meta-sep { opacity:0.5; }
+.bucket-card-meta .meta-class { padding:1px 4px; border-radius:3px; background:var(--win-bg-hover, #f0f0f0); font-size:10px; }
 .bucket-card-loc { font-size:11px; color:var(--win-text-secondary); margin-top:2px; }
 .add-bucket-card { color:var(--win-accent); border-style:dashed; }
 .add-bucket { color:var(--win-accent); }
