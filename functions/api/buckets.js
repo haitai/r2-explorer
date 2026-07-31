@@ -43,13 +43,33 @@ export async function onRequestGet(context) {
 
     const rawBuckets = data.result.buckets || []
 
-    const buckets = rawBuckets.map(b => ({
-      name: b.name,
-      creation_date: b.creation_date,
-      location: b.location,
-      storage_class: b.storage_class,
-      jurisdiction: b.jurisdiction,
+    // Cloudflare list buckets API 对默认值的字段返回空字符串
+    // 需对每个桶调 get bucket 获取真实 location/storage_class/jurisdiction
+    // 桶数量通常不多，并发调用是可接受的
+    const enriched = await Promise.all(rawBuckets.map(async b => {
+      try {
+        const r = await fetch(`${CF_API_BASE}/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${encodeURIComponent(b.name)}`, { headers: cfHeaders(env) })
+        const d = await r.json()
+        if (d.success && d.result) {
+          return {
+            name: b.name,
+            creation_date: d.result.creation_date || b.creation_date,
+            location: d.result.location || '',
+            storage_class: d.result.storage_class || '',
+            jurisdiction: d.result.jurisdiction || '',
+          }
+        }
+      } catch (e) { /* fallthrough */ }
+      return {
+        name: b.name,
+        creation_date: b.creation_date,
+        location: b.location || '',
+        storage_class: b.storage_class || '',
+        jurisdiction: b.jurisdiction || '',
+      }
     }))
+
+    const buckets = enriched
 
     return new Response(JSON.stringify({
       buckets,

@@ -587,7 +587,7 @@ function formatSize(bytes) {
   return size.toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
 }
 
-const LOC_NAMES = { apac: '亚太', eeur: '东欧', enam: '北美东', weur: '西欧', wnam: '北美西', oc: '大洋洲' }
+const LOC_NAMES = { APAC: '亚太', EEUR: '东欧', ENAM: '北美东', WEUR: '西欧', WNAM: '北美西', OC: '大洋洲' }
 function locationShort(loc) { return LOC_NAMES[loc] || loc || '—' }
 function locationLabel(loc) { const s = LOC_NAMES[loc] || loc; return s ? `${s} (${loc || 'default'})` : '默认' }
 function formatDateShort(d) {
