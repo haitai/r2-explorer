@@ -3,7 +3,7 @@
     <!-- 标题栏 -->
     <div class="win-titlebar">
       <span class="titlebar-icon"><Icon name="bucket" :size="16" /></span>
-      <span class="titlebar-text">{{ currentBucket || 'R2 Explorer' }} — {{ currentPathDisplay }}</span>
+      <span class="titlebar-text">{{ currentBucket || 'R2 Explorer' }}{{ currentPathDisplay }}</span>
       <div class="titlebar-actions">
         <button class="titlebar-btn logout" @click="doLogout" title="退出登录"><Icon name="logout" :size="14" /> 退出</button>
       </div>
