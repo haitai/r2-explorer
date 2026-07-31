@@ -111,13 +111,12 @@
         <div v-if="sel.isSelecting && viewMode === 'grid'" class="selection-box" :style="selBoxStyle"></div>
         <div v-if="!currentBucket" class="empty-state bucket-overview">
           <div class="overview-header">
-            <span class="icon"><Icon name="computer" :size="48" /></span>
-            <span class="text" style="font-size:18px">此电脑</span>
+            <span class="icon"><Icon name="computer" :size="28" /></span>
+            <span class="text" style="font-size:14px; font-weight:500">此电脑</span>
           </div>
-          <div class="overview-subtitle">选择一个存储桶开始浏览，或点击左侧「新建存储桶」</div>
           <div class="bucket-cards">
             <div v-for="b in buckets" :key="b.name" class="bucket-card" @click="switchBucket(b.name)">
-              <span class="icon"><Icon name="bucket" :size="32" /></span>
+              <span class="icon"><Icon name="bucket" :size="20" /></span>
               <div class="bucket-card-info">
                 <div class="bucket-card-name">{{ b.name }}</div>
                 <div class="bucket-card-meta">
@@ -130,7 +129,7 @@
               </div>
             </div>
             <div class="bucket-card add-bucket-card" @click="showCreateBucketModal = true">
-              <span class="icon"><Icon name="new-bucket" :size="32" /></span>
+              <span class="icon"><Icon name="new-bucket" :size="20" /></span>
               <div class="bucket-card-info">
                 <div class="bucket-card-name">新建存储桶</div>
               </div>
@@ -1339,17 +1338,17 @@ onUnmounted(() => {
 .bucket-group { }
 .bucket-name-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .bucket-tree { padding-left:20px; }
-.bucket-overview { display:flex; flex-direction:column; align-items:center; padding-top:60px; }
-.overview-header { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
-.overview-subtitle { font-size:13px; color:var(--win-text-secondary); margin-bottom:24px; }
-.bucket-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; max-width:800px; width:100%; padding:0 24px; box-sizing:border-box; }
-.bucket-card { display:flex; align-items:center; gap:12px; padding:16px; border:1px solid var(--win-border); border-radius:8px; cursor:pointer; background:#fff; transition:border-color .15s, box-shadow .15s; }
-.bucket-card:hover { border-color:var(--win-accent); box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+.bucket-overview { display:flex; flex-direction:column; align-items:flex-start; padding:16px 20px; }
+.overview-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.overview-subtitle { font-size:12px; color:var(--win-text-secondary); margin-bottom:12px; }
+.bucket-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:8px; width:100%; box-sizing:border-box; }
+.bucket-card { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--win-border); border-radius:6px; cursor:pointer; background:#fff; transition:border-color .15s, box-shadow .15s; }
+.bucket-card:hover { border-color:var(--win-accent); box-shadow:0 1px 4px rgba(0,0,0,0.06); }
 .bucket-card .bucket-card-info { flex:1; min-width:0; }
-.bucket-card-name { font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.bucket-card-meta { font-size:11px; color:var(--win-text-secondary); margin-top:2px; display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.bucket-card-name { font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bucket-card-meta { font-size:11px; color:var(--win-text-secondary); margin-top:1px; display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
 .bucket-card-meta .meta-sep { opacity:0.5; }
-.bucket-card-meta .meta-class { padding:1px 4px; border-radius:3px; background:var(--win-bg-hover, #f0f0f0); font-size:10px; }
+.bucket-card-meta .meta-class { padding:0 4px; border-radius:3px; background:var(--win-bg-hover, #f0f0f0); font-size:10px; }
 .bucket-card-loc { font-size:11px; color:var(--win-text-secondary); margin-top:2px; }
 .add-bucket-card { color:var(--win-accent); border-style:dashed; }
 .add-bucket { color:var(--win-accent); }
