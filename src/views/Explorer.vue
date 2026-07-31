@@ -58,7 +58,7 @@
               <Icon :name="sidebarComputerExpanded ? 'chevron-down' : 'chevron-right'" :size="12" />
             </span>
             <span class="icon"><Icon name="computer" :size="16" /></span>
-            <span>此电脑</span>
+            <span>此帐户</span>
           </div>
           <template v-if="sidebarComputerExpanded">
             <div v-for="b in buckets" :key="b.name" class="bucket-group">
@@ -112,7 +112,7 @@
         <div v-if="!currentBucket" class="empty-state bucket-overview">
           <div class="overview-header">
             <span class="icon"><Icon name="computer" :size="28" /></span>
-            <span class="text" style="font-size:14px; font-weight:500">此电脑</span>
+            <span class="text" style="font-size:14px; font-weight:500">此帐户</span>
           </div>
           <div class="bucket-cards">
             <div v-for="b in buckets" :key="b.name" class="bucket-card" @click="switchBucket(b.name)">
@@ -386,7 +386,7 @@ const newBucketLocation = ref('apac')
 const expandedBuckets = ref(new Set())  // 展开的存储桶
 const showBucketOverview = ref(true)   // 显示存储桶概览页（首次登录）
 const bucketFoldersCache = ref({})  // { bucketName: [rootFolders] }
-const sidebarComputerExpanded = ref(true)  // 「此电脑」展开状态
+const sidebarComputerExpanded = ref(true)  // 「此帐户」展开状态
 
 // === 导航状态 ===
 const currentPath = ref('')
